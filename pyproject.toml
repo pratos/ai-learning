@@ -1,0 +1,57 @@
+[project]
+name = "iv-workshops"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "click==8.1.6",
+    "lightning>=2.5.1.post0",
+    "loguru>=0.7.3",
+    "opencv-python-headless>=4.11.0.86",
+    "tensorboard>=2.19.0",
+    "torch>=2.7.0",
+    "torchvision>=0.22.0",
+    "transformers>=4.51.3",
+    "typer==0.15.2",
+]
+
+[dependency-groups]
+dev = [
+    "ipython>=9.1.0",
+    "jupyter>=1.1.1",
+    "poethepoet>=0.34.0",
+    "pre-commit>=4.2.0",
+    "pytest>=8.3.5",
+    "ruff>=0.11.0",
+    "watchdog>=4.0.2",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["F", "I"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 18
+
+[tool.pyright]
+include = ["src"]
+exclude = ["temp"]
+ignore = []
+defineConstant = { DEBUG = false }
+
+reportMissingImports = "error"
+reportMissingTypeStubs = false
+
+pythonVersion = "3.12"
+pythonPlatform = "Linux"
+
+[tool.setuptools]
+packages = ["src"]
+package-dir = {"" = "."}
