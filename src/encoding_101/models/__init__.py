@@ -1,5 +1,4 @@
-from .base import BaseAutoencoder, CIFAR10_CLASSES
+from .base import CIFAR10_CLASSES, BaseAutoencoder
 from .vanilla_autoencoder import VanillaAutoencoder
-from .conv_autoencoder import ConvAutoencoder
 
-__all__ = ["BaseAutoencoder", "VanillaAutoencoder", "ConvAutoencoder", "CIFAR10_CLASSES"] 
+__all__ = ["BaseAutoencoder", "VanillaAutoencoder", "CIFAR10_CLASSES"] 
