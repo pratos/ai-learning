@@ -4,10 +4,10 @@ from pathlib import Path
 import typer
 from loguru import logger
 
-from .data import CIFAR10DataModule
-from .models import CIFAR10_CLASSES, VanillaAutoencoder
-from .training import train_autoencoder
-from .visualization import visualize_model_mar
+from src.encoding_101.data import CIFAR10DataModule
+from src.encoding_101.models import CIFAR10_CLASSES, VanillaAutoencoder
+from src.encoding_101.training import train_autoencoder
+from src.encoding_101.visualization import visualize_model_mar
 
 ROOT_DIR = Path(__file__).parents[2]
 

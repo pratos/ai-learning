@@ -6,7 +6,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 from loguru import logger
 
-from ..data import CIFAR10DataModule
+from src.encoding_101.data import CIFAR10DataModule
 
 ROOT_DIR = Path(__file__).parents[3]
 
