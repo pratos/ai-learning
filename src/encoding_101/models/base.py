@@ -1,17 +1,17 @@
 import io
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 import PIL
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 from lightning.pytorch import LightningModule
 from loguru import logger
+
+from src.encoding_101.metrics import compute_mar_at_k
 
 # CIFAR-10 class names
 CIFAR10_CLASSES = [
@@ -155,57 +155,6 @@ class BaseAutoencoder(LightningModule, ABC):
             # Log to TensorBoard with consistent tag name for slider effect
             self.logger.experiment.add_image("train_comparison", image, self.current_epoch)
     
-    def compute_mar_at_k(self, embeddings, labels, k=5):
-        """
-        Compute Mean Average Recall@k
-        
-        Args:
-            embeddings: Tensor of shape (n, d) with n samples and d dimensions
-            labels: Tensor of shape (n,) with class labels
-            k: Number of nearest neighbors to consider
-            
-        Returns:
-            mar_at_k: Mean Average Recall@k
-        """
-        # Compute pairwise distances between all embeddings
-        # We use negative cosine similarity as our distance metric
-        normalized_embeddings = F.normalize(embeddings, p=2, dim=1)
-        cos_sim = torch.mm(normalized_embeddings, normalized_embeddings.t())
-        
-        # Set diagonal to -inf to exclude self-comparisons
-        cos_sim.fill_diagonal_(-float('inf'))
-        
-        # Get top-k indices for each embedding
-        _, topk_indices = cos_sim.topk(k=k, dim=1)
-        
-        # Compute recall@k for each query
-        recalls = []
-        
-        # Convert labels to numpy for easier handling
-        labels_np = labels.cpu().numpy()
-        topk_indices_np = topk_indices.cpu().numpy()
-        
-        for i, query_label in enumerate(labels_np):
-            # Get labels of the top-k nearest neighbors
-            neighbor_labels = labels_np[topk_indices_np[i]]
-            
-            # Count how many are from the same class
-            relevant_retrieved = (neighbor_labels == query_label).sum()
-            
-            # Count total number of relevant items in the dataset (excluding self)
-            total_relevant = (labels_np == query_label).sum() - 1
-            
-            # Calculate recall for this query
-            if total_relevant > 0:
-                recall = min(relevant_retrieved / total_relevant, 1.0)
-                recalls.append(recall)
-        
-        # Calculate mean recall
-        if recalls:
-            return sum(recalls) / len(recalls)
-        else:
-            return 0.0
-    
     def on_validation_epoch_end(self):
         """Log validation images and compute MAR@5 at the end of each validation epoch"""
         # Process validation images
@@ -254,8 +203,8 @@ class BaseAutoencoder(LightningModule, ABC):
             all_embeddings = torch.cat(self.val_embeddings, dim=0)
             all_labels = torch.cat(self.val_labels, dim=0)
             
-            # Compute MAR@5
-            mar_at_5 = self.compute_mar_at_k(all_embeddings, all_labels, k=5)
+            # Compute MAR@5 using the imported function
+            mar_at_5 = compute_mar_at_k(all_embeddings, all_labels, k=5)
             
             # Log the metric
             self.log("val_mar_at_5", mar_at_5)

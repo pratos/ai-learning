@@ -8,6 +8,58 @@ import torch.nn.functional as F
 from loguru import logger
 
 
+def compute_mar_at_k(embeddings, labels, k=5):
+    """
+    Compute Mean Average Recall@k from pre-computed embeddings and labels
+    
+    Args:
+        embeddings: Tensor of shape (n, d) with n samples and d dimensions
+        labels: Tensor of shape (n,) with class labels
+        k: Number of nearest neighbors to consider
+        
+    Returns:
+        mar_at_k: Mean Average Recall@k
+    """
+    # Compute pairwise distances between all embeddings
+    # We use negative cosine similarity as our distance metric
+    normalized_embeddings = F.normalize(embeddings, p=2, dim=1)
+    cos_sim = torch.mm(normalized_embeddings, normalized_embeddings.t())
+    
+    # Set diagonal to -inf to exclude self-comparisons
+    cos_sim.fill_diagonal_(-float('inf'))
+    
+    # Get top-k indices for each embedding
+    _, topk_indices = cos_sim.topk(k=k, dim=1)
+    
+    # Compute recall@k for each query
+    recalls = []
+    
+    # Convert labels to numpy for easier handling
+    labels_np = labels.cpu().numpy()
+    topk_indices_np = topk_indices.cpu().numpy()
+    
+    for i, query_label in enumerate(labels_np):
+        # Get labels of the top-k nearest neighbors
+        neighbor_labels = labels_np[topk_indices_np[i]]
+        
+        # Count how many are from the same class
+        relevant_retrieved = (neighbor_labels == query_label).sum()
+        
+        # Count total number of relevant items in the dataset (excluding self)
+        total_relevant = (labels_np == query_label).sum() - 1
+        
+        # Calculate recall for this query
+        if total_relevant > 0:
+            recall = min(relevant_retrieved / total_relevant, 1.0)
+            recalls.append(recall)
+    
+    # Calculate mean recall
+    if recalls:
+        return sum(recalls) / len(recalls)
+    else:
+        return 0.0
+
+
 def calculate_mar_at_k(dataloader, model, k=5, device='cuda'):
     """
     Calculate MAR@k for a dataset using a trained model
@@ -38,43 +90,8 @@ def calculate_mar_at_k(dataloader, model, k=5, device='cuda'):
     embeddings = torch.cat(embeddings, dim=0)
     labels = torch.cat(labels, dim=0)
     
-    # Calculate MAR@k
-    normalized_embeddings = F.normalize(embeddings, p=2, dim=1)
-    cos_sim = torch.mm(normalized_embeddings, normalized_embeddings.t())
-    
-    # Set diagonal to -inf to exclude self-comparisons
-    cos_sim.fill_diagonal_(-float('inf'))
-    
-    # Get top-k indices for each embedding
-    _, topk_indices = cos_sim.topk(k=k, dim=1)
-    
-    # Compute recall@k for each query
-    recalls = []
-    
-    # Convert to numpy for easier handling
-    labels_np = labels.numpy()
-    topk_indices_np = topk_indices.numpy()
-    
-    for i, query_label in enumerate(labels_np):
-        # Get labels of the top-k nearest neighbors
-        neighbor_labels = labels_np[topk_indices_np[i]]
-        
-        # Count how many are from the same class
-        relevant_retrieved = (neighbor_labels == query_label).sum()
-        
-        # Count total number of relevant items in the dataset (excluding self)
-        total_relevant = (labels_np == query_label).sum() - 1
-        
-        # Calculate recall for this query
-        if total_relevant > 0:
-            recall = min(relevant_retrieved / total_relevant, 1.0)
-            recalls.append(recall)
-    
-    # Calculate mean recall
-    if recalls:
-        return sum(recalls) / len(recalls)
-    else:
-        return 0.0
+    # Use the compute_mar_at_k function
+    return compute_mar_at_k(embeddings, labels, k)
 
 
 def visualize_mar_at_k(dataloader, model, output_dir=None, samples_per_class=10, k=5, device='cuda', 
