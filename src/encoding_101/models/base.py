@@ -12,6 +12,7 @@ from lightning.pytorch import LightningModule
 from loguru import logger
 
 from src.encoding_101.metrics import compute_mar_at_k
+from src.encoding_101.utils import create_comparison_grid
 
 # CIFAR-10 class names
 CIFAR10_CLASSES = [
@@ -116,86 +117,33 @@ class BaseAutoencoder(LightningModule, ABC):
     def on_train_epoch_end(self):
         """Log training images at the end of each training epoch"""
         if len(self.train_imgs) > 0:
-            # Create a side-by-side comparison grid
-            n_images = len(self.train_imgs)
-            
-            # Add text labels to distinguish original from reconstruction
-            # Create a higher quality grid with more padding and a custom size
-            comparison = torch.cat([self.train_imgs, self.train_recon_imgs], dim=0)
-            grid = torchvision.utils.make_grid(
-                comparison, 
-                nrow=n_images, 
-                normalize=True, 
-                padding=10,  # Increase padding between images
-                pad_value=1.0,  # White padding
-                scale_each=True  # Scale each image independently for better contrast
+            # Use the utility function to create comparison grid
+            image_tensor = create_comparison_grid(
+                self.train_imgs,
+                self.train_recon_imgs, 
+                "Training",
+                self.current_epoch
             )
             
-            # Create a larger figure and add a title using matplotlib
-            fig = plt.figure(figsize=(12, 6))  # Larger figure size
-            plt.imshow(grid.permute(1, 2, 0).cpu().numpy())
-            plt.axis('off')
-            
-            # Add labels for original and reconstructed
-            plt.text(0.5, 0.05, "Original (top) vs Reconstruction (bottom)", 
-                     ha="center", transform=fig.transFigure, fontsize=14)
-            plt.title(f"Training Samples - Epoch {self.current_epoch}", fontsize=16)
-            plt.tight_layout(pad=3.0)
-            
-            # Convert figure to image
-            buf = io.BytesIO()
-            plt.savefig(buf, format='png', dpi=150)
-            plt.close(fig)
-            buf.seek(0)
-            
-            # Convert to PIL image and then to tensor
-            image = PIL.Image.open(buf)
-            image = torchvision.transforms.ToTensor()(image)
-            
-            # Log to TensorBoard with consistent tag name for slider effect
-            self.logger.experiment.add_image("train_comparison", image, self.current_epoch)
+            if image_tensor is not None:
+                # Log to TensorBoard with consistent tag name for slider effect
+                self.logger.experiment.add_image("train_comparison", image_tensor, self.current_epoch)
     
     def on_validation_epoch_end(self):
         """Log validation images and compute MAR@5 at the end of each validation epoch"""
         # Process validation images
         if len(self.val_imgs) > 0:
-            # Create a side-by-side comparison grid
-            n_images = len(self.val_imgs)
-            
-            # Create a higher quality grid with more padding and a custom size
-            comparison = torch.cat([self.val_imgs, self.val_recon_imgs], dim=0)
-            grid = torchvision.utils.make_grid(
-                comparison, 
-                nrow=n_images, 
-                normalize=True, 
-                padding=10,  # Increase padding between images
-                pad_value=1.0,  # White padding
-                scale_each=True  # Scale each image independently for better contrast
+            # Use the utility function to create comparison grid
+            image_tensor = create_comparison_grid(
+                self.val_imgs,
+                self.val_recon_imgs,
+                "Validation", 
+                self.current_epoch
             )
             
-            # Create a larger figure and add a title using matplotlib
-            fig = plt.figure(figsize=(12, 6))  # Larger figure size
-            plt.imshow(grid.permute(1, 2, 0).cpu().numpy())
-            plt.axis('off')
-            
-            # Add labels for original and reconstructed
-            plt.text(0.5, 0.05, "Original (top) vs Reconstruction (bottom)", 
-                     ha="center", transform=fig.transFigure, fontsize=14)
-            plt.title(f"Validation Samples - Epoch {self.current_epoch}", fontsize=16)
-            plt.tight_layout(pad=3.0)
-            
-            # Convert figure to image
-            buf = io.BytesIO()
-            plt.savefig(buf, format='png', dpi=150)
-            plt.close(fig)
-            buf.seek(0)
-            
-            # Convert to PIL image and then to tensor
-            image = PIL.Image.open(buf)
-            image = torchvision.transforms.ToTensor()(image)
-            
-            # Log to TensorBoard with consistent tag name for slider effect
-            self.logger.experiment.add_image("val_comparison", image, self.current_epoch)
+            if image_tensor is not None:
+                # Log to TensorBoard with consistent tag name for slider effect
+                self.logger.experiment.add_image("val_comparison", image_tensor, self.current_epoch)
         
         # Compute MAR@5 if we have embeddings
         if self.val_embeddings:
