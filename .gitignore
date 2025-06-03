@@ -5,6 +5,9 @@ __pycache__/
 *.so
 .Python
 
+learning/
+learnings/
+
 # Build and distribution
 build/
 develop-eggs/

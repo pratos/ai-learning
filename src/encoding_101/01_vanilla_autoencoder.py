@@ -98,45 +98,5 @@ def download_cifar10(
     logger.info(f"Labels shape: {labels.shape}")
 
 
-@app.command()
-def visualize_mar(
-    checkpoint_path: str,
-    data_dir: str = "./data",
-    output_dir: str = "./mar_visualizations",
-    batch_size: int = 64,
-    num_workers: int = os.cpu_count() or 4,
-    device_id: int = 0,
-    k: int = 5,
-    samples_per_class: int = 10,
-):
-    """
-    Visualize MAR@k for a trained vanilla autoencoder model using CIFAR-10 dataset
-    
-    Args:
-        checkpoint_path: Path to the trained model checkpoint
-        data_dir: Directory where the data is stored
-        output_dir: Directory to save visualization images
-        batch_size: Batch size for evaluation
-        num_workers: Number of workers for DataLoader
-        device_id: GPU device ID to use
-        k: Number of nearest neighbors to consider
-        samples_per_class: Number of samples to visualize per class
-    """
-    mar_at_k = visualize_model_mar(
-        checkpoint_path=checkpoint_path,
-        model_class=VanillaAutoencoder,
-        data_dir=data_dir,
-        output_dir=output_dir,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        device_id=device_id,
-        k=k,
-        samples_per_class=samples_per_class,
-        class_names=CIFAR10_CLASSES,
-    )
-    
-    return mar_at_k
-
-
 if __name__ == "__main__":
     app()
