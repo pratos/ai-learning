@@ -9,6 +9,7 @@ dependencies = [
     "lightning>=2.5.1.post0",
     "loguru>=0.7.3",
     "matplotlib>=3.10.3",
+    "nvtx>=0.2.12",
     "opencv-python-headless>=4.11.0.86",
     "tensorboard>=2.19.0",
     "torch>=2.7.0",
@@ -54,5 +55,5 @@ pythonVersion = "3.12"
 pythonPlatform = "Linux"
 
 [tool.setuptools]
-packages = ["src"]
+packages = ["src", "scripts"]
 package-dir = {"" = "."}
