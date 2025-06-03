@@ -162,22 +162,9 @@ nsys profile --trace=nvtx,cuda --output=training_profile python scripts/profile_
 
 ## 📚 Learning Resources
 
-- **`learning/learn-nvtx-annotations.md`** - Comprehensive NVTX learning guide with exercises
 - **`scripts/profile_training.py`** - Ready-to-use profiling scripts
 - **[NVIDIA Nsight Systems](https://developer.nvidia.com/nsight-systems)** - Visual profiler for analyzing results
 - **[PyTorch Profiler Guide](https://pytorch.org/tutorials/recipes/recipes/profiler_recipe.html)** - PyTorch profiling integration
-
-## 🎯 Key Features
-
-### Model Architecture
-- **Latent Space Encoding**: Configurable dimensionality (default: 128)
-- **CIFAR-10 Optimization**: Optimized for 32x32x3 image reconstruction
-- **PyTorch Lightning**: Modern training framework with automatic logging
-
-### Evaluation Metrics
-- **MAR@5**: Mean Average Recall at k=5 for embedding quality assessment
-- **Reconstruction Loss**: MSE between input and reconstructed images
-- **Visual Comparison**: Side-by-side original vs reconstructed image grids
 
 ---
 
