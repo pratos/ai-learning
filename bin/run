@@ -272,12 +272,14 @@ run_training() {
     echo "  Batch size: $batch_size"
     
     if [ "$model_type" == "nvtx" ]; then
-        echo -e "${YELLOW}🔍 NVTX profiling enabled${NC}"
-        docker compose run --rm ai-learning \
+        echo -e "${YELLOW}🔍 NVTX profiling enabled with nsys capture${NC}"
+        echo -e "${BLUE}📁 Profiler output will be saved to: ./profiling_output/training_profile_${epochs}ep.qdrep${NC}"
+        docker compose run --rm profiling \
+            nsys profile --trace=nvtx,cuda --output=/app/profiling_output/training_profile_${epochs}ep \
             uv run scripts/profile_training.py profile \
             --max-epochs $epochs \
             --batch-size $batch_size \
-            --enable-nvtx true
+            --enable-nvtx
     else
         echo -e "${GREEN}🎯 Standard training${NC}"
         docker compose run --rm ai-learning \
@@ -352,8 +354,8 @@ case "${1:-help}" in
         echo ""
         echo "Commands:"
         echo "  train [epochs] [batch_size]     - Train vanilla autoencoder (default: 10 epochs, 64 batch)"
-        echo "  train-nvtx [epochs] [batch_size] - Train with NVTX profiling (default: 5 epochs, 64 batch)"
-        echo "  profile                         - Run full NVTX profiling session"
+        echo "  train-nvtx [epochs] [batch_size] - Train with NVTX profiling + nsys capture (default: 5 epochs, 64 batch)"
+        echo "  profile                         - Run full NVTX profiling session (3 epochs, optimized)"
         echo "  tensorboard                     - Start TensorBoard service"
         echo "  shell                          - Start interactive bash shell"
         echo "  sync                           - Sync dependencies with uv"
