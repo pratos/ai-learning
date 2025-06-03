@@ -1,14 +1,15 @@
+from collections import OrderedDict
+from contextlib import nullcontext
+
 import nvtx
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from collections import OrderedDict
-from contextlib import nullcontext
 from loguru import logger
 
-from .base import BaseAutoencoder
-from ..utils import create_comparison_grid
-from ..metrics import compute_mar_at_k
+from src.encoding_101.metrics import compute_mar_at_k
+from src.encoding_101.models.base import BaseAutoencoder
+from src.encoding_101.utils import create_comparison_grid
 
 
 class NVTXColors:

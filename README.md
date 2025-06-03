@@ -15,11 +15,101 @@ ai-learning/
 │   ├── data.py              # Data loading and preprocessing
 │   ├── metrics.py         # Evaluation metrics (MAR@5)
 │   └── visualization/     # Plotting and analysis tools
+├── bin/
+│   └── run                 # Docker runtime script (uv-powered)
 ├── scripts/
 │   └── profile_training.py # NVTX profiling script
 ├── learning/              # Learning materials and guides
-└── logs/                  # Training logs and checkpoints
-└── data/                  # All the data stored here
+├── logs/                  # Training logs and checkpoints
+├── data/                  # All the data stored here
+├── pyproject.toml         # Project dependencies (uv managed)
+└── uv.lock                # Locked dependencies
+```
+
+## 🐳 Docker Training (uv-Powered)
+
+The project uses [uv](https://docs.astral.sh/uv/) for ultra-fast Python package management in Docker, providing 10-100x faster dependency installation compared to pip.
+
+### Prerequisites
+
+The `bin/run` script will automatically install missing dependencies, but you can also install them manually:
+
+1. **Docker & Docker Compose**: [Install Docker](https://docs.docker.com/get-docker/) 
+   - *Auto-installed*: `bin/run` detects and installs Docker + Docker Compose automatically
+2. **NVIDIA Docker Runtime**: [Install nvidia-docker2](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
+   - *Auto-installed*: `bin/run` detects and installs NVIDIA Docker runtime automatically  
+3. **GPU Support**: No host GPU drivers needed!
+   - *Container-only*: All CUDA drivers and GPU libraries are provided by the NVIDIA PyTorch container
+   - *Server-safe*: No destructive changes to your host system
+
+> 💡 **Smart Installation**: Just run `bin/run` and it will guide you through any missing dependencies!
+> 🛡️ **Server-Safe**: All GPU drivers stay safely contained within Docker containers!
+
+### 🚀 Quick Start
+
+```bash
+# First run - auto-installs Docker and NVIDIA runtime if needed
+bin/run train
+
+# Train vanilla autoencoder (10 epochs, batch size 64)
+bin/run train
+
+# Train with NVTX profiling (5 epochs, batch size 64)  
+bin/run train-nvtx
+
+# Run full NVTX profiling session
+bin/run profile
+
+# Start TensorBoard
+bin/run tensorboard
+
+# Interactive development shell
+bin/run shell
+```
+
+### 🔧 uv-Powered Features
+
+```bash
+# Sync dependencies (blazing fast!)
+bin/run sync
+
+# Add new dependencies
+bin/run uv add numpy
+
+# Run any uv command
+bin/run uv --help
+
+# Custom training parameters
+bin/run train 20 128        # 20 epochs, batch size 128
+bin/run train-nvtx 5 32     # NVTX training, 5 epochs, batch size 32
+```
+
+### 🏗️ Docker Architecture
+
+Our Docker setup uses [official uv images](https://docs.astral.sh/uv/guides/integration/docker/) with several optimizations:
+
+- **Base Image**: `ghcr.io/astral-sh/uv:python3.12-bookworm-slim`
+- **Intermediate Layers**: Dependencies installed separately for optimal caching
+- **Cache Mounts**: Build cache preserved between builds for faster rebuilds
+- **Virtual Environment**: Properly managed with uv sync workflow
+
+### Docker Services
+
+- **`ai-learning`**: Main training container with GPU support
+- **`tensorboard`**: TensorBoard visualization (port 6007)
+- **`profiling`**: Dedicated NVTX profiling container
+
+### Manual Docker Commands
+
+```bash
+# Manual docker compose commands
+docker compose up -d tensorboard              # Start TensorBoard service
+docker compose run --rm ai-learning bash      # Interactive shell
+docker compose down                           # Stop all services
+
+# Build optimizations
+docker compose build --progress=plain         # See build progress
+docker compose build --no-cache               # Force rebuild without cache
 ```
 
 ---
@@ -57,11 +147,16 @@ With NVTX annotations, you get:
 ### 📊 Using NVTX Profiling
 
 ```bash
-# Profile your training with NVTX annotations
-nsys profile --trace=nvtx,cuda python scripts/profile_training.py profile
+# With Docker (recommended)
+bin/run profile
+
+# Manual profiling in container
+docker-compose run --rm profiling \
+    nsys profile --trace=nvtx,cuda --output=/app/profiling_output/profile \
+    uv run scripts/profile_training.py profile
 
 # Analyze results with Nsight Systems
-nsys-ui <generated_file>.qdrep
+nsys-ui ./profiling_output/profile.qdrep
 ```
 
 ### 🔍 What to Look for in Profiling Results
@@ -149,19 +244,21 @@ class YourModel(nn.Module):
 
 ```bash
 # Profile training for 30 seconds only
-nsys profile --duration=30 --trace=nvtx,cuda python scripts/profile_training.py profile
+nsys profile --duration=30 --trace=nvtx,cuda uv run scripts/profile_training.py profile
 
 # Profile with CPU context switching (advanced)
-nsys profile --trace=nvtx,cuda,osrt --sample=cpu python scripts/profile_training.py profile
+nsys profile --trace=nvtx,cuda,osrt --sample=cpu uv run scripts/profile_training.py profile
 
 # Export specific metrics
-nsys profile --trace=nvtx,cuda --output=training_profile python scripts/profile_training.py profile
+nsys profile --trace=nvtx,cuda --output=training_profile uv run scripts/profile_training.py profile
 ```
 
 ---
 
 ## 📚 Learning Resources
 
+- **[uv Documentation](https://docs.astral.sh/uv/)** - Ultra-fast Python package manager
+- **[uv Docker Integration](https://docs.astral.sh/uv/guides/integration/docker/)** - Best practices for uv in Docker
 - **`scripts/profile_training.py`** - Ready-to-use profiling scripts
 - **[NVIDIA Nsight Systems](https://developer.nvidia.com/nsight-systems)** - Visual profiler for analyzing results
 - **[PyTorch Profiler Guide](https://pytorch.org/tutorials/recipes/recipes/profiler_recipe.html)** - PyTorch profiling integration
@@ -170,5 +267,7 @@ nsys profile --trace=nvtx,cuda --output=training_profile python scripts/profile_
 
 **Need Help?** Check the comprehensive learning guide or run:
 ```bash
-uv run python scripts/profile_training.py --help
+uv run scripts/profile_training.py --help
+# Or with Docker:
+bin/run help
 ```

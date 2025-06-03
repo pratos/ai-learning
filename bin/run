@@ -1,0 +1,375 @@
+#!/bin/bash
+
+# AI Learning - Docker Runtime (uv-powered)
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Enable Docker Bake for better build performance
+export COMPOSE_BAKE=true
+
+echo -e "${BLUE}🐳 AI Learning - Docker Runtime (uv-powered)${NC}"
+echo "============================================="
+
+# Function to detect Linux distribution
+detect_distro() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        echo $ID
+    elif [ -f /etc/redhat-release ]; then
+        echo "rhel"
+    elif [ -f /etc/debian_version ]; then
+        echo "debian"
+    else
+        echo "unknown"
+    fi
+}
+
+# Function to install Docker
+install_docker() {
+    echo -e "${YELLOW}🔧 Installing Docker...${NC}"
+    
+    local distro=$(detect_distro)
+    
+    case $distro in
+        "ubuntu"|"debian")
+            # Update package index
+            sudo apt-get update
+            
+            # Install required packages
+            sudo apt-get install -y \
+                ca-certificates \
+                curl \
+                gnupg \
+                lsb-release
+            
+            # Add Docker's official GPG key
+            sudo mkdir -p /etc/apt/keyrings
+            curl -fsSL https://download.docker.com/linux/$distro/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+            
+            # Set up the repository
+            echo \
+                "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$distro \
+                $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+            
+            # Update package index again
+            sudo apt-get update
+            
+            # Install Docker Engine
+            sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            
+            # Add user to docker group
+            sudo usermod -aG docker $USER
+            
+            echo -e "${GREEN}✅ Docker installed successfully${NC}"
+            echo -e "${YELLOW}⚠️  Please log out and log back in for group changes to take effect${NC}"
+            ;;
+        "rhel"|"centos"|"fedora")
+            # Install using yum/dnf
+            if command -v dnf &> /dev/null; then
+                PKG_MGR="dnf"
+            else
+                PKG_MGR="yum"
+            fi
+            
+            sudo $PKG_MGR install -y yum-utils
+            sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+            sudo $PKG_MGR install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            
+            # Start and enable Docker
+            sudo systemctl start docker
+            sudo systemctl enable docker
+            
+            # Add user to docker group
+            sudo usermod -aG docker $USER
+            
+            echo -e "${GREEN}✅ Docker installed successfully${NC}"
+            ;;
+        *)
+            echo -e "${RED}❌ Unsupported distribution: $distro${NC}"
+            echo "Please install Docker manually: https://docs.docker.com/engine/install/"
+            exit 1
+            ;;
+    esac
+}
+
+# Function to install Docker Compose standalone
+install_docker_compose() {
+    echo -e "${YELLOW}🔧 Installing Docker Compose...${NC}"
+    
+    # Get latest version
+    local compose_version=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+    
+    if [ -z "$compose_version" ]; then
+        echo -e "${YELLOW}⚠️  Could not detect latest version, using v2.27.0${NC}"
+        compose_version="v2.27.0"
+    fi
+    
+    # Download and install
+    sudo curl -L "https://github.com/docker/compose/releases/download/${compose_version}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    sudo chmod +x /usr/local/bin/docker-compose
+    
+    # Create symlink if needed
+    if [ ! -f /usr/bin/docker-compose ]; then
+        sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+    fi
+    
+    echo -e "${GREEN}✅ Docker Compose ${compose_version} installed successfully${NC}"
+}
+
+# Function to install NVIDIA Docker
+install_nvidia_docker() {
+    echo -e "${YELLOW}🔧 Installing NVIDIA Docker runtime...${NC}"
+    
+    local distro=$(detect_distro)
+    
+    case $distro in
+        "ubuntu"|"debian")
+            # Add NVIDIA package repositories
+            distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+            
+            # Handle GPG key - don't prompt if it exists
+            if [ ! -f /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg ]; then
+                curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+            else
+                echo -e "${BLUE}ℹ️  NVIDIA GPG key already exists, skipping...${NC}"
+            fi
+            
+            # Handle repository list - don't duplicate if it exists
+            if [ ! -f /etc/apt/sources.list.d/nvidia-container-toolkit.list ]; then
+                curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+                    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+                    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null
+            else
+                echo -e "${BLUE}ℹ️  NVIDIA repository already configured, skipping...${NC}"
+            fi
+            
+            # Update package index
+            sudo apt-get update
+            
+            # Install NVIDIA Docker
+            sudo apt-get install -y nvidia-docker2
+            
+            # Restart Docker
+            sudo systemctl restart docker
+            
+            echo -e "${GREEN}✅ NVIDIA Docker runtime installed successfully${NC}"
+            ;;
+        "rhel"|"centos"|"fedora")
+            # Add NVIDIA package repositories
+            distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+            
+            # Handle repository file - don't duplicate if it exists
+            if [ ! -f /etc/yum.repos.d/nvidia-container-toolkit.repo ]; then
+                curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/nvidia-container-toolkit.repo | \
+                    sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo > /dev/null
+            else
+                echo -e "${BLUE}ℹ️  NVIDIA repository already configured, skipping...${NC}"
+            fi
+            
+            # Install NVIDIA Docker
+            if command -v dnf &> /dev/null; then
+                sudo dnf install -y nvidia-docker2
+            else
+                sudo yum install -y nvidia-docker2
+            fi
+            
+            # Restart Docker
+            sudo systemctl restart docker
+            
+            echo -e "${GREEN}✅ NVIDIA Docker runtime installed successfully${NC}"
+            ;;
+        *)
+            echo -e "${RED}❌ Unsupported distribution for NVIDIA Docker: $distro${NC}"
+            echo "Please install NVIDIA Docker manually: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
+            exit 1
+            ;;
+    esac
+}
+
+# Check if Docker is installed
+if ! command -v docker &> /dev/null; then
+    echo -e "${YELLOW}⚠️  Docker not found. Installing Docker...${NC}"
+    install_docker
+    echo -e "${BLUE}🔄 Please run this script again after logging out and back in.${NC}"
+    exit 0
+fi
+
+# Check if Docker Compose is available
+if ! docker compose version &> /dev/null; then
+    echo -e "${YELLOW}⚠️  Docker Compose not found. Installing Docker Compose...${NC}"
+    install_docker_compose
+    
+    # Verify installation worked
+    if ! docker compose version &> /dev/null; then
+        echo -e "${RED}❌ Docker Compose installation failed. Please install manually.${NC}"
+        echo "Visit: https://docs.docker.com/compose/install/"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✅ Docker Compose verified working${NC}"
+fi
+
+# Check if Docker is running
+if ! docker info > /dev/null 2>&1; then
+    echo -e "${RED}❌ Docker is not running. Please start Docker first.${NC}"
+    echo "Try: sudo systemctl start docker"
+    exit 1
+fi
+
+# Check if nvidia-docker is available
+if ! docker run --rm --gpus all nvidia/cuda:11.0-base-ubuntu20.04 nvidia-smi > /dev/null 2>&1; then
+    echo -e "${YELLOW}⚠️  NVIDIA Docker runtime not available.${NC}"
+    echo -e "${BLUE}ℹ️  GPU drivers will be provided by the NVIDIA PyTorch container.${NC}"
+    
+    # Check if nvidia-docker2 package is already installed
+    if command -v apt-get &> /dev/null && dpkg -l | grep -q nvidia-docker2; then
+        echo -e "${BLUE}ℹ️  nvidia-docker2 package found, restarting Docker service...${NC}"
+        sudo systemctl restart docker
+        sleep 2
+    elif (command -v yum &> /dev/null || command -v dnf &> /dev/null) && rpm -qa | grep -q nvidia-docker2; then
+        echo -e "${BLUE}ℹ️  nvidia-docker2 package found, restarting Docker service...${NC}"
+        sudo systemctl restart docker
+        sleep 2
+    else
+        echo -e "${YELLOW}Installing NVIDIA Docker runtime...${NC}"
+        install_nvidia_docker
+        echo -e "${BLUE}🔄 NVIDIA Docker runtime installed. Testing again...${NC}"
+    fi
+    
+    # Test again after installation/restart
+    if ! docker run --rm --gpus all nvidia/cuda:11.0-base-ubuntu20.04 nvidia-smi > /dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  NVIDIA Docker runtime test failed, but continuing...${NC}"
+        echo -e "${BLUE}ℹ️  GPU functionality will be provided by the container's NVIDIA PyTorch base image.${NC}"
+    else
+        echo -e "${GREEN}✅ NVIDIA Docker runtime is now working${NC}"
+    fi
+else
+    echo -e "${GREEN}✅ NVIDIA Docker runtime already working${NC}"
+fi
+
+echo -e "${GREEN}✅ Docker and NVIDIA runtime are available${NC}"
+
+# Build the Docker image
+echo -e "${YELLOW}🔨 Building Docker image with uv...${NC}"
+docker compose build ai-learning
+
+# Function to run training
+run_training() {
+    local model_type=${1:-"vanilla"}
+    local epochs=${2:-10}
+    local batch_size=${3:-64}
+    
+    echo -e "${BLUE}🚀 Starting training with:${NC}"
+    echo "  Model: $model_type"
+    echo "  Epochs: $epochs"
+    echo "  Batch size: $batch_size"
+    
+    if [ "$model_type" == "nvtx" ]; then
+        echo -e "${YELLOW}🔍 NVTX profiling enabled${NC}"
+        docker compose run --rm ai-learning \
+            uv run scripts/profile_training.py profile \
+            --max-epochs $epochs \
+            --batch-size $batch_size \
+            --enable-nvtx true
+    else
+        echo -e "${GREEN}🎯 Standard training${NC}"
+        docker compose run --rm ai-learning \
+            uv run python -m src.encoding_101.01_vanilla_autoencoder train-ae \
+            --max-epochs $epochs \
+            --batch-size $batch_size
+    fi
+}
+
+# Function to run NVTX profiling
+run_profiling() {
+    echo -e "${YELLOW}🔍 Running NVTX profiling session...${NC}"
+    docker compose run --rm profiling \
+        nsys profile --trace=nvtx,cuda --output=/app/profiling_output/training_profile \
+        uv run scripts/profile_training.py profile --max-epochs 3
+    
+    echo -e "${GREEN}✅ Profiling complete! Check ./profiling_output/ for results${NC}"
+}
+
+# Function to start TensorBoard
+start_tensorboard() {
+    echo -e "${BLUE}📊 Starting TensorBoard...${NC}"
+    docker compose up -d tensorboard
+    echo -e "${GREEN}✅ TensorBoard running at http://localhost:6007${NC}"
+}
+
+# Function to run interactive shell
+run_shell() {
+    echo -e "${BLUE}🐚 Starting interactive shell...${NC}"
+    docker compose run --rm ai-learning bash
+}
+
+# Function to run uv commands
+run_uv() {
+    echo -e "${BLUE}🔧 Running uv command: $*${NC}"
+    docker compose run --rm ai-learning uv "$@"
+}
+
+# Function to sync dependencies
+sync_deps() {
+    echo -e "${YELLOW}📦 Syncing dependencies with uv...${NC}"
+    docker compose run --rm ai-learning uv sync --locked
+    echo -e "${GREEN}✅ Dependencies synced${NC}"
+}
+
+# Parse command line arguments
+case "${1:-help}" in
+    "train")
+        run_training "${2:-vanilla}" "${3:-10}" "${4:-64}"
+        ;;
+    "train-nvtx")
+        run_training "nvtx" "${2:-5}" "${3:-64}"
+        ;;
+    "profile")
+        run_profiling
+        ;;
+    "tensorboard")
+        start_tensorboard
+        ;;
+    "shell")
+        run_shell
+        ;;
+    "sync")
+        sync_deps
+        ;;
+    "uv")
+        shift
+        run_uv "$@"
+        ;;
+    "help"|*)
+        echo -e "${BLUE}Usage: $0 [COMMAND] [OPTIONS]${NC}"
+        echo ""
+        echo "Commands:"
+        echo "  train [epochs] [batch_size]     - Train vanilla autoencoder (default: 10 epochs, 64 batch)"
+        echo "  train-nvtx [epochs] [batch_size] - Train with NVTX profiling (default: 5 epochs, 64 batch)"
+        echo "  profile                         - Run full NVTX profiling session"
+        echo "  tensorboard                     - Start TensorBoard service"
+        echo "  shell                          - Start interactive bash shell"
+        echo "  sync                           - Sync dependencies with uv"
+        echo "  uv [command]                   - Run any uv command"
+        echo "  help                           - Show this help message"
+        echo ""
+        echo "Examples:"
+        echo "  $0 train 20 128                - Train for 20 epochs with batch size 128"
+        echo "  $0 train-nvtx 5 64             - Train with NVTX for 5 epochs"
+        echo "  $0 profile                     - Run profiling session"
+        echo "  $0 sync                        - Sync project dependencies"
+        echo "  $0 uv add torch                - Add PyTorch dependency"
+        echo "  $0 shell                       - Interactive development"
+        echo ""
+        echo "Installation:"
+        echo "  This script will automatically install Docker, Docker Compose, and NVIDIA Docker runtime"
+        echo "  if they are not already installed on your system."
+        ;;
+esac
