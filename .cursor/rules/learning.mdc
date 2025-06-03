@@ -1,0 +1,355 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: Guide for generating comprehensive learning materials with step-by-step implementations and validation checkpoints
+globs: 
+alwaysApply: false
+---
+
+# Rule: Generating Learning Materials with Step-by-Step Implementation and Validation
+
+## Goal
+To guide an AI assistant in creating comprehensive, educational content that teaches both theoretical understanding and practical implementation of technical concepts in Python, PyTorch, NumPy, and JAX. The content should be optimized for progressive learning with clear explanations, code examples, citations, and validation checkpoints that ensure understanding before progression.
+
+## Key Features
+- **Gated Learning**: Users cannot proceed without demonstrating understanding
+- **Interactive Checkpoints**: Questions and exercises at each major step
+- **Adaptive Pacing**: Content adjusts based on user responses
+- **Incremental Complexity**: Concepts build from simple to advanced
+- **Multi-Framework**: Shows implementations across NumPy, PyTorch, and JAX
+
+## Output
+- **Format:** Markdown (`.md`)
+- **Location:** `/learning/`
+- **Filename:** `learn-[topic-name].md` (e.g., `learn-batch-normalization.md`)
+
+## Process
+1. **Receive Topic Request:** User specifies a topic to learn (e.g., "batch normalization", "attention mechanism", "gradient descent")
+2. **Phase 1: Conceptual Overview**
+   - Generate introduction explaining what the concept is and why it matters
+   - Create intuitive explanations using analogies where helpful
+   - Include mathematical formulation with clear notation
+   - Add visual descriptions (describe what diagrams would show)
+   - Include citations to foundational papers/resources
+   - **CHECKPOINT**: Present comprehension questions and wait for user confirmation
+3. **Phase 2: Implementation Breakdown**
+   - Start with the simplest possible implementation in NumPy
+   - Break down into micro-steps with validation after each
+   - Progress to more optimized/practical implementations
+   - Show implementations in multiple frameworks (PyTorch, JAX) if applicable
+   - Include detailed comments explaining each step
+   - **CHECKPOINT**: Code verification exercises before proceeding
+4. **Phase 3: Practical Examples**
+   - Provide working examples with synthetic data
+   - Show common use cases and variations
+   - Include debugging tips and common pitfalls
+   - **CHECKPOINT**: User must complete a mini-exercise
+5. **Phase 4: Advanced Topics** (if applicable)
+   - Optimization techniques
+   - Recent improvements or variations
+   - Connection to related concepts
+   - **FINAL CHECKPOINT**: Synthesis questions
+
+## Output Format
+The generated learning material *must* follow this structure:
+
+```markdown
+# Learning: [Topic Name]
+
+## 1. Conceptual Understanding
+
+### What is [Topic]?
+[Clear, intuitive explanation of the concept]
+
+### Why does it matter?
+[Practical importance and use cases]
+
+### Mathematical Foundation
+[Mathematical formulation with clear notation]
+```
+[Include LaTeX equations as needed]
+```
+
+### Visual Intuition
+[Description of key visual concepts that aid understanding]
+
+### Key Papers & Resources
+- [Citation 1: Author et al., Year] - Brief description
+- [Citation 2: Author et al., Year] - Brief description
+
+---
+### 🛑 CHECKPOINT 1: Conceptual Understanding
+
+Before we proceed to implementation, let's verify your understanding:
+
+**Q1**: In your own words, explain what [topic] does and why it's useful.
+> *Your answer:* _______________
+
+**Q2**: Given the equation [simplified version], what happens when [parameter] increases?
+> *Your answer:* _______________
+
+**Q3**: True/False: [Statement about the concept]
+> *Your answer:* _______________
+
+✅ **Ready to proceed?** Type "understood" after answering these questions.
+
+---
+
+## 2. Step-by-Step Implementation
+
+### 2.1 Basic Implementation (NumPy)
+
+#### Step 1: Understanding the Input
+```python
+# First, let's understand our input structure
+import numpy as np
+
+# Example input
+input_data = np.array([[1, 2, 3], [4, 5, 6]])
+print(f"Input shape: {input_data.shape}")
+print(f"Input values: \n{input_data}")
+```
+
+**🤔 Quick Check**: What shape would the output be for this operation?
+> *Your answer:* _______________
+
+#### Step 2: Core Computation
+```python
+def basic_[topic]_numpy_step1(input_data):
+    """First step of implementation - [what it does]"""
+    # Step 1: [Detailed explanation]
+    result = ...
+    
+    # Let's verify what happened
+    print(f"After step 1: {result.shape}")
+    return result
+```
+
+**🔧 Try it**: Run this code with your own input. What happens if you pass a 3D array?
+
+#### Step 3: Complete Implementation
+```python
+def basic_[topic]_numpy(input_data, **params):
+    """
+    Basic implementation of [topic] using NumPy.
+    
+    Args:
+        input_data: [description]
+        **params: [relevant parameters]
+    
+    Returns:
+        [description of output]
+    """
+    # Complete implementation combining all steps
+    # [Full implementation with detailed comments]
+    return result
+```
+
+---
+### 🛑 CHECKPOINT 2: Implementation Understanding
+
+**Exercise 1**: Implement a simplified version that only handles 2D arrays:
+```python
+def your_implementation(input_data):
+    # TODO: Your code here
+    pass
+```
+
+**Exercise 2**: What would go wrong if we forgot to [specific step]? Try it and observe.
+
+**Q1**: Why do we need to [specific operation] before [other operation]?
+> *Your answer:* _______________
+
+✅ **Ready for PyTorch?** Type "implementation understood" after completing these exercises.
+
+---
+
+### 2.2 PyTorch Implementation
+```python
+import torch
+import torch.nn as nn
+
+class [Topic]Layer(nn.Module):
+    """
+    PyTorch implementation of [topic].
+    """
+    def __init__(self, **params):
+        super().__init__()
+        # Initialize parameters
+        
+    def forward(self, x):
+        # Step-by-step implementation with comments
+        return output
+```
+
+### 2.3 JAX Implementation (if applicable)
+```python
+import jax
+import jax.numpy as jnp
+
+def [topic]_jax(params, input_data):
+    """
+    JAX implementation with automatic differentiation support.
+    """
+    # Implementation
+    return output
+```
+
+## 3. Working Examples
+
+### Example 1: Simple Use Case
+```python
+# Complete working example with synthetic data
+# Shows basic usage and expected output
+```
+
+### Example 2: Real-World Application
+```python
+# More complex example showing practical usage
+# Includes data preprocessing and result interpretation
+```
+
+## 4. Common Pitfalls & Tips
+
+### Debugging Checklist
+- [ ] Check input dimensions match expected shape
+- [ ] Verify numerical stability (no NaN/inf values)
+- [ ] [Other topic-specific checks]
+
+### Performance Optimization
+- Tip 1: [Optimization technique]
+- Tip 2: [Memory efficiency consideration]
+
+### Common Mistakes
+1. **Mistake**: [Description]
+   **Solution**: [How to fix it]
+
+## 5. Advanced Topics & Variations
+
+### Recent Improvements
+- [Variation 1]: Brief description and when to use
+- [Variation 2]: Brief description and when to use
+
+### Related Concepts
+- **[Related Topic 1]**: How it connects to this topic
+- **[Related Topic 2]**: How it connects to this topic
+
+## 6. Exercises & Further Learning
+
+### Practice Problems
+1. **Exercise 1**: [Description of implementation task]
+   - Hint: [Guidance without giving away solution]
+
+2. **Exercise 2**: [More challenging task]
+   - Hint: [Guidance]
+
+### Suggested Next Topics
+- [Topic 1]: Natural progression from this concept
+- [Topic 2]: Related area to explore
+
+### Additional Resources
+- [Resource 1]: [URL/Reference] - Why it's helpful
+- [Resource 2]: [URL/Reference] - Why it's helpful
+
+---
+### 🛑 FINAL CHECKPOINT: Mastery Verification
+
+**Synthesis Question**: How would you modify the implementation to handle [edge case or variation]?
+> *Your implementation:* _______________
+
+**Reflection**: What was the most challenging part to understand? How does this concept connect to [related topic]?
+> *Your reflection:* _______________
+
+✅ **Congratulations!** You've mastered [topic]. Ready for the next topic?
+
+---
+
+## 📚 Learning Support Section
+
+### If You're Stuck:
+1. **Conceptual Issues**:
+   - Request: "Explain [concept] with a simpler analogy"
+   - Request: "Break down the math step by step"
+   - Request: "Show me a visual representation"
+
+2. **Implementation Issues**:
+   - Request: "Show me a minimal example"
+   - Request: "Debug my code: [paste your attempt]"
+   - Request: "Explain why we need [specific line]"
+
+3. **Connection Issues**:
+   - Request: "How does this relate to [other concept]?"
+   - Request: "Show me a real-world application"
+   - Request: "Compare this to [similar concept]"
+
+### Learning Paths:
+- **Too Easy?** → Request: "Show me the advanced version"
+- **Too Hard?** → Request: "Start with prerequisites"
+- **Want Practice?** → Request: "Give me more exercises"
+```
+
+## Implementation Guidelines
+1. **Code Quality**:
+   - All code should be runnable and tested
+   - Include type hints where helpful
+   - Follow PEP 8 style guidelines
+   - Add docstrings to all functions/classes
+
+2. **Learning Progression**:
+   - Start with simplest concepts
+   - Build complexity gradually
+   - Reinforce understanding with examples
+   - Connect to practical applications
+
+3. **Framework Coverage**:
+   - NumPy: Always include for fundamental understanding
+   - PyTorch: Include for deep learning applications
+   - JAX: Include when functional programming or JIT compilation is relevant
+   - TensorFlow: Optional, include if specifically requested
+
+4. **Citation Format**:
+   - Use format: [Authors, "Title", Conference/Journal, Year]
+   - Include arXiv links where available
+   - Prioritize foundational papers and recent improvements
+
+## Interaction Model
+The AI should:
+1. **Enforce Learning Progression**:
+   - Present content in digestible chunks
+   - Stop at each checkpoint and wait for user response
+   - Only proceed when user indicates understanding
+   - If user struggles, provide additional explanations or simpler examples
+   
+2. **Adaptive Teaching**:
+   - If user answers checkpoint questions incorrectly, provide clarification
+   - Offer alternative explanations if concepts aren't clear
+   - Break down complex steps into smaller sub-steps if needed
+   - Gauge understanding through responses and adjust pace
+
+3. **Interactive Validation**:
+   - After each code block, encourage user to run it
+   - Ask prediction questions ("What do you think will happen if...?")
+   - Provide debugging challenges at each stage
+   - Validate understanding before moving to next framework
+
+4. **Checkpoint Responses**:
+   - **"understood"** → Proceed to implementation
+   - **"implementation understood"** → Move to next framework
+   - **"need help with [X]"** → Provide focused explanation
+   - **Wrong answer to question** → Clarify misconception
+   - **"skip"** → Remind user that understanding is crucial, offer simplified version
+
+5. **Progressive Disclosure**:
+   - Don't show PyTorch implementation until NumPy is understood
+   - Don't show optimizations until basic version is clear
+   - Don't discuss advanced topics until fundamentals are solid
+
+## Target Audience
+Assume the reader has:
+- Basic Python programming knowledge
+- Understanding of linear algebra and calculus
+- Familiarity with NumPy arrays
+- Motivation to understand both theory and implementation
