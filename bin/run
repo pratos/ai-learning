@@ -156,7 +156,8 @@ install_nvidia_docker() {
             # Install NVIDIA Docker
             sudo apt-get install -y nvidia-docker2
             
-            # Restart Docker
+            # Restart Docker daemon to load new runtime
+            echo -e "${BLUE}🔄 Restarting Docker to load NVIDIA runtime...${NC}"
             sudo systemctl restart docker
             
             echo -e "${GREEN}✅ NVIDIA Docker runtime installed successfully${NC}"
@@ -180,7 +181,8 @@ install_nvidia_docker() {
                 sudo yum install -y nvidia-docker2
             fi
             
-            # Restart Docker
+            # Restart Docker daemon to load new runtime
+            echo -e "${BLUE}🔄 Restarting Docker to load NVIDIA runtime...${NC}"
             sudo systemctl restart docker
             
             echo -e "${GREEN}✅ NVIDIA Docker runtime installed successfully${NC}"
@@ -191,6 +193,70 @@ install_nvidia_docker() {
             exit 1
             ;;
     esac
+}
+
+# Function to ensure Docker is running
+ensure_docker_running() {
+    local command_name="${1:-}"
+    
+    # Check if Docker is running
+    if ! docker info > /dev/null 2>&1; then
+        echo -e "${RED}❌ Docker is not running. Please start Docker first.${NC}"
+        echo "Try: sudo systemctl start docker"
+        exit 1
+    fi
+    
+    # Check NVIDIA runtime only for commands that need it (skip for cleanup)
+    if [[ "$command_name" != "cleanup" ]]; then
+        # Check if nvidia-docker is available
+        if ! docker run --rm --gpus all nvidia/cuda:11.0-base-ubuntu20.04 nvidia-smi > /dev/null 2>&1; then
+            echo -e "${YELLOW}⚠️  NVIDIA Docker runtime not available.${NC}"
+            echo -e "${BLUE}ℹ️  GPU drivers will be provided by the NVIDIA PyTorch container.${NC}"
+            
+            # Check if nvidia-docker2 package is installed but not working
+            nvidia_docker_installed=false
+            if command -v apt-get &> /dev/null && dpkg -l | grep -q nvidia-docker2; then
+                nvidia_docker_installed=true
+                echo -e "${BLUE}ℹ️  nvidia-docker2 package found${NC}"
+            elif (command -v yum &> /dev/null || command -v dnf &> /dev/null) && rpm -qa | grep -q nvidia-docker2; then
+                nvidia_docker_installed=true
+                echo -e "${BLUE}ℹ️  nvidia-docker2 package found${NC}"
+            fi
+            
+            if [ "$nvidia_docker_installed" = true ]; then
+                echo -e "${YELLOW}🔧 NVIDIA Docker package installed but not working. This could be due to:${NC}"
+                echo "  • Docker daemon needs to reload configuration"
+                echo "  • Missing NVIDIA drivers on host"
+                echo "  • Docker runtime configuration issues"
+                echo ""
+                echo -e "${BLUE}💡 You can try:${NC}"
+                echo "  • sudo systemctl reload docker    # Reload config without restart"
+                echo "  • sudo systemctl restart docker   # Full restart if reload doesn't work"
+                echo "  • nvidia-smi                      # Check if NVIDIA drivers are working"
+                echo ""
+                echo -e "${YELLOW}⚠️  Continuing without NVIDIA runtime - GPU will work via container drivers${NC}"
+            else
+                echo -e "${BLUE}📦 Installing NVIDIA Docker runtime...${NC}"
+                install_nvidia_docker
+                echo -e "${BLUE}🔄 NVIDIA Docker runtime installed.${NC}"
+                
+                # Test again after installation
+                if docker run --rm --gpus all nvidia/cuda:11.0-base-ubuntu20.04 nvidia-smi > /dev/null 2>&1; then
+                    echo -e "${GREEN}✅ NVIDIA Docker runtime is now working${NC}"
+                else
+                    echo -e "${YELLOW}⚠️  NVIDIA Docker runtime still not working after installation${NC}"
+                    echo -e "${BLUE}ℹ️  This is often due to missing NVIDIA drivers on the host${NC}"
+                    echo -e "${BLUE}ℹ️  GPU functionality will be provided by the container's NVIDIA PyTorch base image${NC}"
+                fi
+            fi
+        else
+            echo -e "${GREEN}✅ NVIDIA Docker runtime already working${NC}"
+        fi
+        
+        echo -e "${GREEN}✅ Docker and NVIDIA runtime are available${NC}"
+    else
+        echo -e "${GREEN}✅ Docker is running and ready for cleanup${NC}"
+    fi
 }
 
 # Check if Docker is installed
@@ -216,55 +282,21 @@ if ! docker compose version &> /dev/null; then
     echo -e "${GREEN}✅ Docker Compose verified working${NC}"
 fi
 
-# Check if Docker is running
-if ! docker info > /dev/null 2>&1; then
-    echo -e "${RED}❌ Docker is not running. Please start Docker first.${NC}"
-    echo "Try: sudo systemctl start docker"
-    exit 1
-fi
+# Docker and NVIDIA runtime checks are now handled per-command in ensure_docker_running()
 
-# Check if nvidia-docker is available
-if ! docker run --rm --gpus all nvidia/cuda:11.0-base-ubuntu20.04 nvidia-smi > /dev/null 2>&1; then
-    echo -e "${YELLOW}⚠️  NVIDIA Docker runtime not available.${NC}"
-    echo -e "${BLUE}ℹ️  GPU drivers will be provided by the NVIDIA PyTorch container.${NC}"
-    
-    # Check if nvidia-docker2 package is already installed
-    if command -v apt-get &> /dev/null && dpkg -l | grep -q nvidia-docker2; then
-        echo -e "${BLUE}ℹ️  nvidia-docker2 package found, restarting Docker service...${NC}"
-        sudo systemctl restart docker
-        sleep 2
-    elif (command -v yum &> /dev/null || command -v dnf &> /dev/null) && rpm -qa | grep -q nvidia-docker2; then
-        echo -e "${BLUE}ℹ️  nvidia-docker2 package found, restarting Docker service...${NC}"
-        sudo systemctl restart docker
-        sleep 2
-    else
-        echo -e "${YELLOW}Installing NVIDIA Docker runtime...${NC}"
-        install_nvidia_docker
-        echo -e "${BLUE}🔄 NVIDIA Docker runtime installed. Testing again...${NC}"
-    fi
-    
-    # Test again after installation/restart
-    if ! docker run --rm --gpus all nvidia/cuda:11.0-base-ubuntu20.04 nvidia-smi > /dev/null 2>&1; then
-        echo -e "${YELLOW}⚠️  NVIDIA Docker runtime test failed, but continuing...${NC}"
-        echo -e "${BLUE}ℹ️  GPU functionality will be provided by the container's NVIDIA PyTorch base image.${NC}"
-    else
-        echo -e "${GREEN}✅ NVIDIA Docker runtime is now working${NC}"
-    fi
-else
-    echo -e "${GREEN}✅ NVIDIA Docker runtime already working${NC}"
-fi
-
-echo -e "${GREEN}✅ Docker and NVIDIA runtime are available${NC}"
-
-# Build the Docker image
-echo -e "${YELLOW}🔨 Building Docker image with uv...${NC}"
-docker compose build ai-learning
+# Function to build Docker image when needed
+build_image_if_needed() {
+    echo -e "${YELLOW}🔨 Building Docker image with uv...${NC}"
+    docker compose build ai-learning
+}
 
 # Function to run training
 run_training() {
     local model_type=${1:-"vanilla"}
     local epochs=${2:-10}
     local batch_size=${3:-64}
+    
+    build_image_if_needed
     
     echo -e "${BLUE}🚀 Starting training with:${NC}"
     echo "  Model: $model_type"
@@ -291,6 +323,8 @@ run_training() {
 
 # Function to run NVTX profiling
 run_profiling() {
+    build_image_if_needed
+    
     echo -e "${YELLOW}🔍 Running NVTX profiling session...${NC}"
     docker compose run --rm profiling \
         nsys profile --trace=nvtx,cuda --output=/app/profiling_output/training_profile \
@@ -301,6 +335,8 @@ run_profiling() {
 
 # Function to start TensorBoard
 start_tensorboard() {
+    build_image_if_needed
+    
     echo -e "${BLUE}📊 Starting TensorBoard...${NC}"
     docker compose up -d tensorboard
     echo -e "${GREEN}✅ TensorBoard running at http://localhost:6007${NC}"
@@ -308,46 +344,321 @@ start_tensorboard() {
 
 # Function to run interactive shell
 run_shell() {
+    build_image_if_needed
+    
     echo -e "${BLUE}🐚 Starting interactive shell...${NC}"
     docker compose run --rm ai-learning bash
 }
 
 # Function to run uv commands
 run_uv() {
+    build_image_if_needed
+    
     echo -e "${BLUE}🔧 Running uv command: $*${NC}"
     docker compose run --rm ai-learning uv "$@"
 }
 
 # Function to sync dependencies
 sync_deps() {
+    build_image_if_needed
+    
     echo -e "${YELLOW}📦 Syncing dependencies with uv...${NC}"
     docker compose run --rm ai-learning uv sync --locked
     echo -e "${GREEN}✅ Dependencies synced${NC}"
 }
 
+# Function to launch Nsight Systems UI
+run_nsys_ui() {
+    local profile_file="$1"
+    
+    echo -e "${BLUE}📊 Nsight Systems UI Launcher (Containerized)${NC}"
+    echo "=============================================="
+    
+    # Check if X11 forwarding is possible
+    if [ -z "$DISPLAY" ]; then
+        echo -e "${YELLOW}⚠️  No DISPLAY environment variable set${NC}"
+        echo "For GUI applications, you need X11 forwarding:"
+        echo ""
+        echo -e "${BLUE}Local desktop:${NC}"
+        echo "  export DISPLAY=:0"
+        echo ""
+        echo -e "${BLUE}Remote SSH connection:${NC}"
+        echo "  ssh -X username@hostname"
+        echo "  # or"
+        echo "  ssh -Y username@hostname"
+        echo ""
+        echo -e "${BLUE}For headless servers (using X11 over network):${NC}"
+        echo "  # Install X11 forwarding on client"
+        echo "  # Then connect with: ssh -X username@hostname"
+        echo ""
+        echo -e "${YELLOW}💡 You can still run this command - it will show the error but might work in some environments${NC}"
+        echo ""
+    fi
+    
+    # Check if profiling_output directory exists
+    if [ ! -d "./profiling_output" ]; then
+        echo -e "${YELLOW}⚠️  No profiling_output directory found${NC}"
+        echo "Run some profiling first:"
+        echo "  bin/run train-nvtx 5"
+        echo "  bin/run profile"
+        return 1
+    fi
+    
+    # List available profile files (both .qdrep and .nsys-rep)
+    local profile_files=(./profiling_output/*.qdrep ./profiling_output/*.nsys-rep)
+    
+    # Filter out non-existent files (bash expands to literal *.extension if no files match)
+    local existing_files=()
+    for file in "${profile_files[@]}"; do
+        if [ -f "$file" ]; then
+            existing_files+=("$file")
+        fi
+    done
+    
+    # Check if any profile files exist
+    if [ ${#existing_files[@]} -eq 0 ]; then
+        echo -e "${YELLOW}⚠️  No .qdrep or .nsys-rep files found in profiling_output/${NC}"
+        echo "Run some profiling first:"
+        echo "  bin/run train-nvtx 5"
+        echo "  bin/run profile"
+        echo ""
+        echo -e "${BLUE}Available files in profiling_output/:${NC}"
+        ls -la ./profiling_output/ 2>/dev/null || echo "  (directory empty)"
+        return 1
+    fi
+    
+    # Use existing files array
+    profile_files=("${existing_files[@]}")
+    
+    # If no specific file provided, show options
+    if [ -z "$profile_file" ]; then
+        echo -e "${GREEN}📁 Available profile files:${NC}"
+        echo ""
+        local i=1
+        for file in "${profile_files[@]}"; do
+            local basename_file=$(basename "$file")
+            local size=$(du -h "$file" 2>/dev/null | cut -f1)
+            local date=$(stat -c %y "$file" 2>/dev/null | cut -d' ' -f1,2 | cut -d'.' -f1)
+            echo "  $i) $basename_file ($size, $date)"
+            ((i++))
+        done
+        echo ""
+        echo -e "${BLUE}Usage:${NC}"
+        echo "  bin/run nsys-ui                          # Show this list"
+        echo "  bin/run nsys-ui <filename>               # Open specific file"
+        echo "  bin/run nsys-ui 1                       # Open file by number"
+        echo "  bin/run nsys-ui latest                   # Open most recent file"
+        echo ""
+        return 0
+    fi
+    
+    # Handle different input types to determine target file
+    local target_file=""
+    local container_path=""
+    
+    if [ "$profile_file" = "latest" ]; then
+        # Find the most recent file (both .qdrep and .nsys-rep)
+        target_file=$(ls -t ./profiling_output/*.qdrep ./profiling_output/*.nsys-rep 2>/dev/null | head -n1)
+        if [ -f "$target_file" ]; then
+            container_path="/app/profiling_output/$(basename "$target_file")"
+            echo -e "${BLUE}🔍 Opening most recent profile: $(basename "$target_file")${NC}"
+        else
+            echo -e "${RED}❌ No profile files found${NC}"
+            return 1
+        fi
+    elif [[ "$profile_file" =~ ^[0-9]+$ ]]; then
+        # Handle numeric selection
+        local file_index=$((profile_file - 1))
+        if [ $file_index -ge 0 ] && [ $file_index -lt ${#profile_files[@]} ]; then
+            target_file="${profile_files[$file_index]}"
+            container_path="/app/profiling_output/$(basename "$target_file")"
+            echo -e "${BLUE}🔍 Opening profile #$profile_file: $(basename "$target_file")${NC}"
+        else
+            echo -e "${RED}❌ Invalid file number: $profile_file${NC}"
+            echo "Available files: 1-${#profile_files[@]}"
+            return 1
+        fi
+    else
+        # Handle filename (support both .qdrep and .nsys-rep extensions)
+        local found_file=""
+        
+        # Try exact filename first (handles full paths like profiling_output/file.nsys-rep)
+        if [ -f "./$profile_file" ]; then
+            found_file="./$profile_file"
+        # Try in profiling_output directory
+        elif [ -f "./profiling_output/$profile_file" ]; then
+            found_file="./profiling_output/$profile_file"
+        # Try with .qdrep extension
+        elif [ -f "./profiling_output/${profile_file%.qdrep}.qdrep" ]; then
+            found_file="./profiling_output/${profile_file%.qdrep}.qdrep"
+        # Try with .nsys-rep extension  
+        elif [ -f "./profiling_output/${profile_file%.nsys-rep}.nsys-rep" ]; then
+            found_file="./profiling_output/${profile_file%.nsys-rep}.nsys-rep"
+        # Try without any extension, adding both in profiling_output
+        elif [ -f "./profiling_output/${profile_file}.qdrep" ]; then
+            found_file="./profiling_output/${profile_file}.qdrep"
+        elif [ -f "./profiling_output/${profile_file}.nsys-rep" ]; then
+            found_file="./profiling_output/${profile_file}.nsys-rep"
+        # Try removing profiling_output/ prefix if user included it
+        elif [[ "$profile_file" == profiling_output/* ]]; then
+            local basename_only="${profile_file#profiling_output/}"
+            if [ -f "./profiling_output/$basename_only" ]; then
+                found_file="./profiling_output/$basename_only"
+            fi
+        fi
+        
+        if [ -n "$found_file" ]; then
+            target_file="$found_file"
+            container_path="/app/profiling_output/$(basename "$target_file")"
+            echo -e "${BLUE}🔍 Opening profile: $(basename "$target_file")${NC}"
+        else
+            echo -e "${RED}❌ File not found: $profile_file${NC}"
+            echo "Run 'bin/run nsys-ui' to see available files"
+            echo ""
+            echo -e "${BLUE}Available files in profiling_output/:${NC}"
+            ls -la ./profiling_output/ 2>/dev/null || echo "  (directory empty)"
+            return 1
+        fi
+    fi
+    
+    # Launch nsys-ui in container with GUI forwarding
+    echo -e "${GREEN}🚀 Launching Nsight Systems UI in container...${NC}"
+    echo "Host file: $target_file"
+    echo "Container path: $container_path"
+    echo ""
+    
+    # Build image only when we actually need to run the container
+    build_image_if_needed
+    
+    # Check if we're on a system that might need xhost permissions
+    if command -v xhost &> /dev/null && [ -n "$DISPLAY" ]; then
+        echo -e "${BLUE}🔧 Setting up X11 permissions...${NC}"
+        xhost +local:docker >/dev/null 2>&1 || true
+    fi
+    
+    echo -e "${BLUE}💡 Note: nsys-ui will run inside the container${NC}"
+    echo -e "${BLUE}💡 Make sure X11 forwarding is working if using SSH${NC}"
+    echo ""
+    
+    # Run nsys-ui in the profiling container with GUI support
+    echo -e "${GREEN}🚀 Launching Nsight Systems UI in container...${NC}"
+    echo "Host file: $target_file"
+    echo "Container path: $container_path"
+    echo ""
+    
+    # Build image only when we actually need to run the container
+    build_image_if_needed
+    
+    # Check if we're on a system that might need xhost permissions
+    if command -v xhost &> /dev/null && [ -n "$DISPLAY" ]; then
+        echo -e "${BLUE}🔧 Setting up X11 permissions...${NC}"
+        xhost +local:docker >/dev/null 2>&1 || true
+    fi
+    
+    echo -e "${BLUE}💡 Note: nsys-ui will run inside the container${NC}"
+    echo -e "${BLUE}💡 Make sure X11 forwarding is working if using SSH${NC}"
+    echo ""
+    
+    # Run nsys-ui in the profiling container with GUI support
+    docker compose run --rm \
+        -e DISPLAY="$DISPLAY" \
+        -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+        profiling \
+        nsys-ui "$container_path"
+    
+    echo -e "${GREEN}✅ Nsight Systems UI session ended${NC}"
+}
+
+# Function to clean up Docker resources
+docker_cleanup() {
+    echo -e "${BLUE}🧹 Docker Cleanup${NC}"
+    echo "=================="
+    
+    # Show current disk usage
+    echo -e "${YELLOW}📊 Current Docker disk usage:${NC}"
+    docker system df
+    echo ""
+    
+    # Count dangling images
+    local dangling_count=$(docker images --filter "dangling=true" -q | wc -l)
+    echo -e "${BLUE}🔍 Found $dangling_count dangling images (with <none> tag)${NC}"
+    
+    if [ "$dangling_count" -gt 0 ]; then
+        echo -e "${YELLOW}🗑️  Removing dangling images...${NC}"
+        docker image prune -f
+        echo -e "${GREEN}✅ Removed dangling images${NC}"
+    else
+        echo -e "${GREEN}✅ No dangling images found${NC}"
+    fi
+    
+    echo ""
+    
+    # Clean up unused containers
+    echo -e "${YELLOW}🗑️  Removing stopped containers...${NC}"
+    docker container prune -f
+    
+    # Clean up unused networks
+    echo -e "${YELLOW}🗑️  Removing unused networks...${NC}"
+    docker network prune -f
+    
+    # Clean up unused volumes (be careful with this)
+    local volume_count=$(docker volume ls -qf dangling=true | wc -l)
+    if [ "$volume_count" -gt 0 ]; then
+        echo -e "${YELLOW}⚠️  Found $volume_count unused volumes${NC}"
+        echo -e "${BLUE}💡 To clean volumes: docker volume prune -f${NC}"
+        echo -e "${BLUE}💡 (Not auto-cleaned to preserve data)${NC}"
+    else
+        echo -e "${GREEN}✅ No unused volumes found${NC}"
+    fi
+    
+    echo ""
+    echo -e "${YELLOW}📊 Disk usage after cleanup:${NC}"
+    docker system df
+    
+    echo ""
+    echo -e "${GREEN}✅ Docker cleanup complete!${NC}"
+    echo -e "${BLUE}💡 For aggressive cleanup: docker system prune -a${NC}"
+}
+
 # Parse command line arguments
 case "${1:-help}" in
     "train")
+        ensure_docker_running "train"
         run_training "${2:-vanilla}" "${3:-10}" "${4:-64}"
         ;;
     "train-nvtx")
+        ensure_docker_running "train-nvtx"
         run_training "nvtx" "${2:-5}" "${3:-64}"
         ;;
     "profile")
+        ensure_docker_running "profile"
         run_profiling
         ;;
     "tensorboard")
+        ensure_docker_running "tensorboard"
         start_tensorboard
         ;;
     "shell")
+        ensure_docker_running "shell"
         run_shell
         ;;
     "sync")
+        ensure_docker_running "sync"
         sync_deps
         ;;
     "uv")
+        ensure_docker_running "uv"
         shift
         run_uv "$@"
+        ;;
+    "nsys-ui")
+        ensure_docker_running "nsys-ui"
+        shift
+        run_nsys_ui "$@"
+        ;;
+    "cleanup")
+        ensure_docker_running "cleanup"
+        docker_cleanup
         ;;
     "help"|*)
         echo -e "${BLUE}Usage: $0 [COMMAND] [OPTIONS]${NC}"
@@ -360,6 +671,8 @@ case "${1:-help}" in
         echo "  shell                          - Start interactive bash shell"
         echo "  sync                           - Sync dependencies with uv"
         echo "  uv [command]                   - Run any uv command"
+        echo "  nsys-ui [filename]              - Launch Nsight Systems UI"
+        echo "  cleanup                        - Clean up Docker resources"
         echo "  help                           - Show this help message"
         echo ""
         echo "Examples:"
@@ -369,6 +682,10 @@ case "${1:-help}" in
         echo "  $0 sync                        - Sync project dependencies"
         echo "  $0 uv add torch                - Add PyTorch dependency"
         echo "  $0 shell                       - Interactive development"
+        echo "  $0 nsys-ui                     - List available profiling files"
+        echo "  $0 nsys-ui latest              - Open most recent profile"
+        echo "  $0 nsys-ui training_profile_5ep - Open specific profile file"
+        echo "  $0 cleanup                     - Remove dangling Docker images"
         echo ""
         echo "Installation:"
         echo "  This script will automatically install Docker, Docker Compose, and NVIDIA Docker runtime"
