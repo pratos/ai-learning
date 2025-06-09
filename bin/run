@@ -292,151 +292,61 @@ build_image_if_needed() {
 
 # Function to run training
 run_training() {
-    local model_type=${1:-"vanilla"}
-    local epochs=${2:-10}
-    local batch_size=${3:-64}
-    local job_id=${4:-""}
-    local num_workers=${5:-""}
+    local epochs=${1:-10}
+    local batch_size=${2:-64}
     
     build_image_if_needed
     
-    echo -e "${BLUE}🚀 Starting training with:${NC}"
-    echo "  Model: $model_type"
+    echo -e "${BLUE}🚀 Starting standard training with:${NC}"
     echo "  Epochs: $epochs"
     echo "  Batch size: $batch_size"
     
-    if [ "$model_type" == "nvtx" ]; then
-        # Set output filename
-        local output_name="training_profile_${epochs}ep"
-        if [ -n "$job_id" ]; then
-            output_name="${job_id}_${epochs}ep"
-        fi
-        
-        # Set default num_workers for profiling mode
-        local workers=${num_workers:-"2"}  # Default to 2 workers for better performance
-        
-        echo -e "${YELLOW}🔍 NVTX profiling enabled with nsys capture${NC}"
-        echo -e "${BLUE}📁 Profiler output will be saved to: ./profiling_output/${output_name}.nsys-rep${NC}"
-        echo -e "${BLUE}🔧 Using $workers DataLoader workers${NC}"
-        echo -e "${BLUE}📊 GPU metrics: Graphics, DRAM, NVLink, PCIe, SM, Tensor Core${NC}"
-        docker compose run --rm profiling \
-            nsys profile --trace=nvtx,cuda,osrt,cublas,cudnn \
-            --backtrace=dwarf \
-            --sample=cpu \
-            --cpuctxsw=process-tree \
-            --force-overwrite=true \
-            --cuda-memory-usage=true \
-            --gpu-metrics-device=all \
-            --gpu-metrics-frequency=10000 \
-            --gpu-metrics-set=gr,dram,nvl,pcie,sm,tensor \
-            --wait=all \
-            --delay=2 \
-            --duration=300 \
-            --output=/app/profiling_output/${output_name} \
-            uv run scripts/profile_training.py profile \
-            --max-epochs $epochs \
-            --batch-size $batch_size \
-            --num-workers $workers \
-            --enable-nvtx
-    else
-        echo -e "${GREEN}🎯 Standard training${NC}"
-        docker compose run --rm ai-learning \
-            uv run python -m src.encoding_101.01_vanilla_autoencoder train-ae \
-            --max-epochs $epochs \
-            --batch-size $batch_size
-    fi
+    docker compose run --rm ai-learning \
+        uv run python -m src.encoding_101.01_vanilla_autoencoder train-ae \
+        --max-epochs $epochs \
+        --batch-size $batch_size
 }
 
-# Function to run NVTX profiling
-run_profiling() {
-    local job_id=${1:-""}
-    local num_workers=${2:-"2"}  # Default to 2 workers
-    local output_name="training_profile"
-    if [ -n "$job_id" ]; then
-        output_name="${job_id}_3ep"
-    fi
+# Function to run NVTX profiling training
+run_nvtx_training() {
+    local epochs=${1:-5}
+    local batch_size=${2:-256}
+    local job_id=${3:-"training_profile"}
+    local num_workers=${4:-2}
     
     build_image_if_needed
     
-    echo -e "${YELLOW}🔍 Running NVTX profiling session...${NC}"
-    echo -e "${BLUE}📁 Profiler output will be saved to: ./profiling_output/${output_name}.nsys-rep${NC}"
-    echo -e "${BLUE}🔧 Using $num_workers DataLoader workers${NC}"
+    echo -e "${YELLOW}🔍 NVTX profiling training with:${NC}"
+    echo "  Epochs: $epochs"
+    echo "  Batch size: $batch_size"
+    echo "  Job ID: $job_id"
+    echo "  Workers: $num_workers"
+    echo -e "${BLUE}📁 Output: ./profiling_output/${job_id}_${epochs}ep.nsys-rep${NC}"
     echo -e "${BLUE}📊 GPU metrics: Graphics, DRAM, NVLink, PCIe, SM, Tensor Core${NC}"
+    
     docker compose run --rm profiling \
-        nsys profile --trace=nvtx,cuda,osrt,cublas,cudnn \
+        nsys profile \
+        --trace=nvtx,cuda,osrt,cublas,cudnn \
         --backtrace=dwarf \
         --sample=cpu \
         --cpuctxsw=process-tree \
         --force-overwrite=true \
         --cuda-memory-usage=true \
-        --gpu-metrics-device=all \
+        --gpu-metrics-devices=all \
         --gpu-metrics-frequency=10000 \
         --gpu-metrics-set=gr,dram,nvl,pcie,sm,tensor \
         --wait=all \
         --delay=2 \
         --duration=300 \
-        --output=/app/profiling_output/${output_name} \
-        uv run scripts/profile_training.py profile --max-epochs 3 --num-workers $num_workers
-    
-    echo -e "${GREEN}✅ Profiling complete! Check ./profiling_output/ for results${NC}"
+        --output=/app/profiling_output/${job_id}_${epochs}ep \
+        uv run scripts/profile_training.py profile \
+        --max-epochs $epochs \
+        --batch-size $batch_size \
+        --num-workers $num_workers \
+        --enable-nvtx
 }
 
-# Function to run simplified NVTX profiling (avoids MMAP issues)
-run_simple_profiling() {
-    local job_id=${1:-""}
-    local output_name="simple_profile"
-    if [ -n "$job_id" ]; then
-        output_name="${job_id}_simple"
-    fi
-    
-    build_image_if_needed
-    
-    echo -e "${YELLOW}🔍 Running simplified NVTX profiling session...${NC}"
-    echo -e "${BLUE}📁 Profiler output will be saved to: ./profiling_output/${output_name}.nsys-rep${NC}"
-    echo -e "${BLUE}📊 GPU metrics: Graphics, DRAM, SM utilization${NC}"
-    docker compose run --rm profiling \
-        nsys profile --trace=nvtx,cuda \
-        --force-overwrite=true \
-        --cuda-memory-usage=true \
-        --gpu-metrics-device=all \
-        --gpu-metrics-frequency=20000 \
-        --gpu-metrics-set=gr,dram,sm \
-        --process-scope=system-wide \
-        --output=/app/profiling_output/${output_name} \
-        uv run scripts/profile_training.py profile --max-epochs 2
-    
-    echo -e "${GREEN}✅ Simplified profiling complete! Check ./profiling_output/ for results${NC}"
-}
 
-# Function to run GPU-focused NVTX profiling (maximum GPU insights)
-run_gpu_profiling() {
-    local job_id=${1:-""}
-    local output_name="gpu_profile"
-    if [ -n "$job_id" ]; then
-        output_name="${job_id}_gpu"
-    fi
-    
-    build_image_if_needed
-    
-    echo -e "${YELLOW}🔍 Running GPU-focused NVTX profiling session...${NC}"
-    echo -e "${BLUE}📁 Profiler output will be saved to: ./profiling_output/${output_name}.nsys-rep${NC}"
-    echo -e "${BLUE}🚀 Maximum GPU metrics collection enabled${NC}"
-    echo -e "${BLUE}📊 GPU metrics: All available (GR, DRAM, NVL, PCIe, SM, Tensor, Power, Clocks)${NC}"
-    docker compose run --rm profiling \
-        nsys profile --trace=nvtx,cuda,osrt,cublas,cudnn,opengl \
-        --force-overwrite=true \
-        --cuda-memory-usage=true \
-        --gpu-metrics-device=all \
-        --gpu-metrics-frequency=5000 \
-        --gpu-metrics-set=all \
-        --wait=all \
-        --delay=3 \
-        --duration=180 \
-        --output=/app/profiling_output/${output_name} \
-        uv run scripts/profile_training.py profile --max-epochs 2 --num-workers 2 --batch-size 128
-    
-    echo -e "${GREEN}✅ GPU profiling complete! Check ./profiling_output/ for comprehensive GPU metrics${NC}"
-}
 
 # Function to start TensorBoard
 start_tensorboard() {
@@ -455,224 +365,7 @@ run_shell() {
     docker compose run --rm ai-learning bash
 }
 
-# Function to run uv commands
-run_uv() {
-    build_image_if_needed
-    
-    echo -e "${BLUE}🔧 Running uv command: $*${NC}"
-    docker compose run --rm ai-learning uv "$@"
-}
 
-# Function to sync dependencies
-sync_deps() {
-    build_image_if_needed
-    
-    echo -e "${YELLOW}📦 Syncing dependencies with uv...${NC}"
-    docker compose run --rm ai-learning uv sync --locked
-    echo -e "${GREEN}✅ Dependencies synced${NC}"
-}
-
-# Function to launch Nsight Systems UI
-run_nsys_ui() {
-    local profile_file="$1"
-    
-    echo -e "${BLUE}📊 Nsight Systems UI Launcher (Containerized)${NC}"
-    echo "=============================================="
-    
-    # Check if X11 forwarding is possible
-    if [ -z "$DISPLAY" ]; then
-        echo -e "${YELLOW}⚠️  No DISPLAY environment variable set${NC}"
-        echo "For GUI applications, you need X11 forwarding:"
-        echo ""
-        echo -e "${BLUE}Local desktop:${NC}"
-        echo "  export DISPLAY=:0"
-        echo ""
-        echo -e "${BLUE}Remote SSH connection:${NC}"
-        echo "  ssh -X username@hostname"
-        echo "  # or"
-        echo "  ssh -Y username@hostname"
-        echo ""
-        echo -e "${BLUE}For headless servers (using X11 over network):${NC}"
-        echo "  # Install X11 forwarding on client"
-        echo "  # Then connect with: ssh -X username@hostname"
-        echo ""
-        echo -e "${YELLOW}💡 You can still run this command - it will show the error but might work in some environments${NC}"
-        echo ""
-    fi
-    
-    # Check if profiling_output directory exists
-    if [ ! -d "./profiling_output" ]; then
-        echo -e "${YELLOW}⚠️  No profiling_output directory found${NC}"
-        echo "Run some profiling first:"
-        echo "  bin/run train-nvtx 5"
-        echo "  bin/run profile"
-        return 1
-    fi
-    
-    # List available profile files (both .qdrep and .nsys-rep)
-    local profile_files=(./profiling_output/*.qdrep ./profiling_output/*.nsys-rep)
-    
-    # Filter out non-existent files (bash expands to literal *.extension if no files match)
-    local existing_files=()
-    for file in "${profile_files[@]}"; do
-        if [ -f "$file" ]; then
-            existing_files+=("$file")
-        fi
-    done
-    
-    # Check if any profile files exist
-    if [ ${#existing_files[@]} -eq 0 ]; then
-        echo -e "${YELLOW}⚠️  No .qdrep or .nsys-rep files found in profiling_output/${NC}"
-        echo "Run some profiling first:"
-        echo "  bin/run train-nvtx 5"
-        echo "  bin/run profile"
-        echo ""
-        echo -e "${BLUE}Available files in profiling_output/:${NC}"
-        ls -la ./profiling_output/ 2>/dev/null || echo "  (directory empty)"
-        return 1
-    fi
-    
-    # Use existing files array
-    profile_files=("${existing_files[@]}")
-    
-    # If no specific file provided, show options
-    if [ -z "$profile_file" ]; then
-        echo -e "${GREEN}📁 Available profile files:${NC}"
-        echo ""
-        local i=1
-        for file in "${profile_files[@]}"; do
-            local basename_file=$(basename "$file")
-            local size=$(du -h "$file" 2>/dev/null | cut -f1)
-            local date=$(stat -c %y "$file" 2>/dev/null | cut -d' ' -f1,2 | cut -d'.' -f1)
-            echo "  $i) $basename_file ($size, $date)"
-            ((i++))
-        done
-        echo ""
-        echo -e "${BLUE}Usage:${NC}"
-        echo "  bin/run nsys-ui                          # Show this list"
-        echo "  bin/run nsys-ui <filename>               # Open specific file"
-        echo "  bin/run nsys-ui 1                       # Open file by number"
-        echo "  bin/run nsys-ui latest                   # Open most recent file"
-        echo ""
-        return 0
-    fi
-    
-    # Handle different input types to determine target file
-    local target_file=""
-    local container_path=""
-    
-    if [ "$profile_file" = "latest" ]; then
-        # Find the most recent file (both .qdrep and .nsys-rep)
-        target_file=$(ls -t ./profiling_output/*.qdrep ./profiling_output/*.nsys-rep 2>/dev/null | head -n1)
-        if [ -f "$target_file" ]; then
-            container_path="/app/profiling_output/$(basename "$target_file")"
-            echo -e "${BLUE}🔍 Opening most recent profile: $(basename "$target_file")${NC}"
-        else
-            echo -e "${RED}❌ No profile files found${NC}"
-            return 1
-        fi
-    elif [[ "$profile_file" =~ ^[0-9]+$ ]]; then
-        # Handle numeric selection
-        local file_index=$((profile_file - 1))
-        if [ $file_index -ge 0 ] && [ $file_index -lt ${#profile_files[@]} ]; then
-            target_file="${profile_files[$file_index]}"
-            container_path="/app/profiling_output/$(basename "$target_file")"
-            echo -e "${BLUE}🔍 Opening profile #$profile_file: $(basename "$target_file")${NC}"
-        else
-            echo -e "${RED}❌ Invalid file number: $profile_file${NC}"
-            echo "Available files: 1-${#profile_files[@]}"
-            return 1
-        fi
-    else
-        # Handle filename (support both .qdrep and .nsys-rep extensions)
-        local found_file=""
-        
-        # Try exact filename first (handles full paths like profiling_output/file.nsys-rep)
-        if [ -f "./$profile_file" ]; then
-            found_file="./$profile_file"
-        # Try in profiling_output directory
-        elif [ -f "./profiling_output/$profile_file" ]; then
-            found_file="./profiling_output/$profile_file"
-        # Try with .qdrep extension
-        elif [ -f "./profiling_output/${profile_file%.qdrep}.qdrep" ]; then
-            found_file="./profiling_output/${profile_file%.qdrep}.qdrep"
-        # Try with .nsys-rep extension  
-        elif [ -f "./profiling_output/${profile_file%.nsys-rep}.nsys-rep" ]; then
-            found_file="./profiling_output/${profile_file%.nsys-rep}.nsys-rep"
-        # Try without any extension, adding both in profiling_output
-        elif [ -f "./profiling_output/${profile_file}.qdrep" ]; then
-            found_file="./profiling_output/${profile_file}.qdrep"
-        elif [ -f "./profiling_output/${profile_file}.nsys-rep" ]; then
-            found_file="./profiling_output/${profile_file}.nsys-rep"
-        # Try removing profiling_output/ prefix if user included it
-        elif [[ "$profile_file" == profiling_output/* ]]; then
-            local basename_only="${profile_file#profiling_output/}"
-            if [ -f "./profiling_output/$basename_only" ]; then
-                found_file="./profiling_output/$basename_only"
-            fi
-        fi
-        
-        if [ -n "$found_file" ]; then
-            target_file="$found_file"
-            container_path="/app/profiling_output/$(basename "$target_file")"
-            echo -e "${BLUE}🔍 Opening profile: $(basename "$target_file")${NC}"
-        else
-            echo -e "${RED}❌ File not found: $profile_file${NC}"
-            echo "Run 'bin/run nsys-ui' to see available files"
-            echo ""
-            echo -e "${BLUE}Available files in profiling_output/:${NC}"
-            ls -la ./profiling_output/ 2>/dev/null || echo "  (directory empty)"
-            return 1
-        fi
-    fi
-    
-    # Launch nsys-ui in container with GUI forwarding
-    echo -e "${GREEN}🚀 Launching Nsight Systems UI in container...${NC}"
-    echo "Host file: $target_file"
-    echo "Container path: $container_path"
-    echo ""
-    
-    # Build image only when we actually need to run the container
-    build_image_if_needed
-    
-    # Check if we're on a system that might need xhost permissions
-    if command -v xhost &> /dev/null && [ -n "$DISPLAY" ]; then
-        echo -e "${BLUE}🔧 Setting up X11 permissions...${NC}"
-        xhost +local:docker >/dev/null 2>&1 || true
-    fi
-    
-    echo -e "${BLUE}💡 Note: nsys-ui will run inside the container${NC}"
-    echo -e "${BLUE}💡 Make sure X11 forwarding is working if using SSH${NC}"
-    echo ""
-    
-    # Run nsys-ui in the profiling container with GUI support
-    echo -e "${GREEN}🚀 Launching Nsight Systems UI in container...${NC}"
-    echo "Host file: $target_file"
-    echo "Container path: $container_path"
-    echo ""
-    
-    # Build image only when we actually need to run the container
-    build_image_if_needed
-    
-    # Check if we're on a system that might need xhost permissions
-    if command -v xhost &> /dev/null && [ -n "$DISPLAY" ]; then
-        echo -e "${BLUE}🔧 Setting up X11 permissions...${NC}"
-        xhost +local:docker >/dev/null 2>&1 || true
-    fi
-    
-    echo -e "${BLUE}💡 Note: nsys-ui will run inside the container${NC}"
-    echo -e "${BLUE}💡 Make sure X11 forwarding is working if using SSH${NC}"
-    echo ""
-    
-    # Run nsys-ui in the profiling container with GUI support
-    docker compose run --rm \
-        -e DISPLAY="$DISPLAY" \
-        -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-        profiling \
-        nsys-ui "$container_path"
-    
-    echo -e "${GREEN}✅ Nsight Systems UI session ended${NC}"
-}
 
 # Function to clean up Docker resources
 docker_cleanup() {
@@ -729,33 +422,11 @@ docker_cleanup() {
 case "${1:-help}" in
     "train")
         ensure_docker_running "train"
-        run_training "${2:-vanilla}" "${3:-10}" "${4:-64}"
+        run_training "${2:-10}" "${3:-64}"
         ;;
     "train-nvtx")
         ensure_docker_running "train-nvtx"
-        run_training "nvtx" "${2:-5}" "${3:-64}" "${4:-}" "${5:-}"
-        ;;
-    "profile")
-        ensure_docker_running "profile"
-        run_profiling "${2:-}" "${3:-}"
-        ;;
-    "profile-simple")
-        ensure_docker_running "profile-simple"
-        run_simple_profiling "${2:-}"
-        ;;
-    "profile-fast")
-        ensure_docker_running "profile-fast"
-        run_profiling "${2:-fast}" "4"  # Use 4 workers for maximum performance
-        ;;
-    "profile-gpu")
-        ensure_docker_running "profile-gpu"
-        run_gpu_profiling "${2:-}"
-        ;;
-    "test-dataloader")
-        ensure_docker_running "test-dataloader"
-        build_image_if_needed
-        echo -e "${YELLOW}🧪 Testing DataLoader for segmentation faults...${NC}"
-        docker compose run --rm profiling uv run scripts/validate_dataloader.py "${2:-256}" "${3:-0}"
+        run_nvtx_training "${2:-5}" "${3:-256}" "${4:-training_profile}" "${5:-2}"
         ;;
     "tensorboard")
         ensure_docker_running "tensorboard"
@@ -765,20 +436,6 @@ case "${1:-help}" in
         ensure_docker_running "shell"
         run_shell
         ;;
-    "sync")
-        ensure_docker_running "sync"
-        sync_deps
-        ;;
-    "uv")
-        ensure_docker_running "uv"
-        shift
-        run_uv "$@"
-        ;;
-    "nsys-ui")
-        ensure_docker_running "nsys-ui"
-        shift
-        run_nsys_ui "$@"
-        ;;
     "cleanup")
         ensure_docker_running "cleanup"
         docker_cleanup
@@ -787,40 +444,26 @@ case "${1:-help}" in
         echo -e "${BLUE}Usage: $0 [COMMAND] [OPTIONS]${NC}"
         echo ""
         echo "Commands:"
-        echo "  train [epochs] [batch_size]     - Train vanilla autoencoder (default: 10 epochs, 64 batch)"
-        echo "  train-nvtx [epochs] [batch_size] [job_id] [num_workers] - Train with NVTX profiling + nsys capture (default: 5 epochs, 64 batch, 2 workers)"
-        echo "  profile [job_id] [num_workers]  - Run full NVTX profiling session (3 epochs, default: 2 workers)"
-        echo "  profile-simple [job_id]         - Run simplified NVTX profiling (avoids MMAP issues)"
-        echo "  profile-fast [job_id]           - Run fast NVTX profiling (4 workers, may have segfaults)"
-        echo "  profile-gpu [job_id]            - Run GPU-focused profiling (comprehensive GPU metrics)"
-        echo "  test-dataloader [batch_size] [num_workers] - Test DataLoader for segmentation faults (default: 256 batch, 0 workers)"
-        echo "  tensorboard                     - Start TensorBoard service"
-        echo "  shell                          - Start interactive bash shell"
-        echo "  sync                           - Sync dependencies with uv"
-        echo "  uv [command]                   - Run any uv command"
-        echo "  nsys-ui [filename]              - Launch Nsight Systems UI"
-        echo "  cleanup                        - Clean up Docker resources"
-        echo "  help                           - Show this help message"
+        echo "  train [epochs] [batch_size]               - Train vanilla autoencoder (default: 10 epochs, 64 batch)"
+        echo "  train-nvtx [epochs] [batch_size] [job_id] [workers] - Train with NVTX profiling (default: 5 epochs, 256 batch, 2 workers)"
+        echo "  tensorboard                               - Start TensorBoard service"
+        echo "  shell                                     - Start interactive bash shell"
+        echo "  cleanup                                   - Clean up Docker resources"
+        echo "  help                                      - Show this help message"
         echo ""
         echo "Examples:"
-        echo "  $0 train 20 128                - Train for 20 epochs with batch size 128"
-        echo "  $0 train-nvtx 5 64             - Train with NVTX for 5 epochs"
-        echo "  $0 train-nvtx 5 64 my_experiment - Train with NVTX and custom job ID"
-        echo "  $0 train-nvtx 5 256 gpu_test 4 - Train with 4 workers for faster data loading"
-        echo "  $0 profile                     - Run profiling session (2 workers default)"
-        echo "  $0 profile my_job              - Run profiling with custom job ID"
-        echo "  $0 profile my_job 4            - Run profiling with 4 workers"
-        echo "  $0 profile-simple              - Run simplified profiling (avoids MMAP errors)"
-        echo "  $0 profile-fast                - Run fast profiling (4 workers, riskier but faster)"
-        echo "  $0 profile-gpu gpu_analysis     - Run comprehensive GPU metrics profiling"
-        echo "  $0 test-dataloader             - Test DataLoader stability before profiling"
-        echo "  $0 sync                        - Sync project dependencies"
-        echo "  $0 uv add torch                - Add PyTorch dependency"
-        echo "  $0 shell                       - Interactive development"
-        echo "  $0 nsys-ui                     - List available profiling files"
-        echo "  $0 nsys-ui latest              - Open most recent profile"
-        echo "  $0 nsys-ui training_profile_5ep - Open specific profile file"
-        echo "  $0 cleanup                     - Remove dangling Docker images"
+        echo "  $0 train 20 128                          - Train for 20 epochs with batch size 128"
+        echo "  $0 train-nvtx 5 256                      - NVTX profiling with 5 epochs, 256 batch size"
+        echo "  $0 train-nvtx 3 512 gpu_experiment 4     - NVTX profiling with custom job ID and 4 workers"
+        echo "  $0 tensorboard                           - Start TensorBoard on port 6007"
+        echo "  $0 shell                                 - Interactive development shell"
+        echo "  $0 cleanup                               - Remove dangling Docker images"
+        echo ""
+        echo "NVTX Profiling Features:"
+        echo "  • Comprehensive GPU metrics (Graphics, DRAM, NVLink, PCIe, SM, Tensor Core)"
+        echo "  • Epoch-level NVTX markers for clear timeline navigation"
+        echo "  • CPU sampling and context switching tracking"
+        echo "  • Output saved to ./profiling_output/[job_id]_[epochs]ep.nsys-rep"
         echo ""
         echo "Installation:"
         echo "  This script will automatically install Docker, Docker Compose, and NVIDIA Docker runtime"
