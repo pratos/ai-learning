@@ -31,6 +31,9 @@ RUN apt-get update && apt-get install -y \
 # Copy uv binary from builder
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
+# Install nvitop system-wide for GPU monitoring
+RUN uv tool install nvitop
+
 # Copy project files
 COPY . /app
 

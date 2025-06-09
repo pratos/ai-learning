@@ -327,7 +327,10 @@ run_profiling() {
     
     echo -e "${YELLOW}🔍 Running NVTX profiling session...${NC}"
     docker compose run --rm profiling \
-        nsys profile --trace=nvtx,cuda --output=/app/profiling_output/training_profile \
+        nsys profile --trace=nvtx,cuda,osrt,mpi \
+        --pytorch=autograd-nvtx,autograd-shapes-nvtx,functions-trace \
+        --python-functions-trace=/app/profiling_output/training_profile_functions.json \
+        --output=/app/profiling_output/training_profile \
         uv run scripts/profile_training.py profile --max-epochs 3
     
     echo -e "${GREEN}✅ Profiling complete! Check ./profiling_output/ for results${NC}"
