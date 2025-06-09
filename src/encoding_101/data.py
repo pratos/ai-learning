@@ -99,19 +99,23 @@ class CIFAR10DataModule(LightningDataModule):
         logger.info("Validation set has exactly 100 images from each of the 10 classes (1000 total)")
 
     def train_dataloader(self):
+        # Disable pin_memory when num_workers=0 to avoid issues during profiling
+        pin_memory = self.num_workers > 0
         return DataLoader(
             self.cifar_train,
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            pin_memory=True,
+            pin_memory=pin_memory,
         )
 
     def val_dataloader(self):
+        # Disable pin_memory when num_workers=0 to avoid issues during profiling
+        pin_memory = self.num_workers > 0
         return DataLoader(
             self.cifar_val,
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            pin_memory=True,
+            pin_memory=pin_memory,
         )

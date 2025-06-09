@@ -295,6 +295,8 @@ run_training() {
     local model_type=${1:-"vanilla"}
     local epochs=${2:-10}
     local batch_size=${3:-64}
+    local job_id=${4:-""}
+    local num_workers=${5:-""}
     
     build_image_if_needed
     
@@ -304,13 +306,37 @@ run_training() {
     echo "  Batch size: $batch_size"
     
     if [ "$model_type" == "nvtx" ]; then
+        # Set output filename
+        local output_name="training_profile_${epochs}ep"
+        if [ -n "$job_id" ]; then
+            output_name="${job_id}_${epochs}ep"
+        fi
+        
+        # Set default num_workers for profiling mode
+        local workers=${num_workers:-"2"}  # Default to 2 workers for better performance
+        
         echo -e "${YELLOW}🔍 NVTX profiling enabled with nsys capture${NC}"
-        echo -e "${BLUE}📁 Profiler output will be saved to: ./profiling_output/training_profile_${epochs}ep.qdrep${NC}"
+        echo -e "${BLUE}📁 Profiler output will be saved to: ./profiling_output/${output_name}.nsys-rep${NC}"
+        echo -e "${BLUE}🔧 Using $workers DataLoader workers${NC}"
+        echo -e "${BLUE}📊 GPU metrics: Graphics, DRAM, NVLink, PCIe, SM, Tensor Core${NC}"
         docker compose run --rm profiling \
-            nsys profile --trace=nvtx,cuda --output=/app/profiling_output/training_profile_${epochs}ep \
+            nsys profile --trace=nvtx,cuda,osrt,cublas,cudnn \
+            --backtrace=dwarf \
+            --sample=cpu \
+            --cpuctxsw=process-tree \
+            --force-overwrite=true \
+            --cuda-memory-usage=true \
+            --gpu-metrics-device=all \
+            --gpu-metrics-frequency=10000 \
+            --gpu-metrics-set=gr,dram,nvl,pcie,sm,tensor \
+            --wait=all \
+            --delay=2 \
+            --duration=300 \
+            --output=/app/profiling_output/${output_name} \
             uv run scripts/profile_training.py profile \
             --max-epochs $epochs \
             --batch-size $batch_size \
+            --num-workers $workers \
             --enable-nvtx
     else
         echo -e "${GREEN}🎯 Standard training${NC}"
@@ -323,17 +349,93 @@ run_training() {
 
 # Function to run NVTX profiling
 run_profiling() {
+    local job_id=${1:-""}
+    local num_workers=${2:-"2"}  # Default to 2 workers
+    local output_name="training_profile"
+    if [ -n "$job_id" ]; then
+        output_name="${job_id}_3ep"
+    fi
+    
     build_image_if_needed
     
     echo -e "${YELLOW}🔍 Running NVTX profiling session...${NC}"
+    echo -e "${BLUE}📁 Profiler output will be saved to: ./profiling_output/${output_name}.nsys-rep${NC}"
+    echo -e "${BLUE}🔧 Using $num_workers DataLoader workers${NC}"
+    echo -e "${BLUE}📊 GPU metrics: Graphics, DRAM, NVLink, PCIe, SM, Tensor Core${NC}"
     docker compose run --rm profiling \
-        nsys profile --trace=nvtx,cuda,osrt,mpi \
-        --pytorch=autograd-nvtx,autograd-shapes-nvtx,functions-trace \
-        --python-functions-trace=/app/profiling_output/training_profile_functions.json \
-        --output=/app/profiling_output/training_profile \
-        uv run scripts/profile_training.py profile --max-epochs 3
+        nsys profile --trace=nvtx,cuda,osrt,cublas,cudnn \
+        --backtrace=dwarf \
+        --sample=cpu \
+        --cpuctxsw=process-tree \
+        --force-overwrite=true \
+        --cuda-memory-usage=true \
+        --gpu-metrics-device=all \
+        --gpu-metrics-frequency=10000 \
+        --gpu-metrics-set=gr,dram,nvl,pcie,sm,tensor \
+        --wait=all \
+        --delay=2 \
+        --duration=300 \
+        --output=/app/profiling_output/${output_name} \
+        uv run scripts/profile_training.py profile --max-epochs 3 --num-workers $num_workers
     
     echo -e "${GREEN}✅ Profiling complete! Check ./profiling_output/ for results${NC}"
+}
+
+# Function to run simplified NVTX profiling (avoids MMAP issues)
+run_simple_profiling() {
+    local job_id=${1:-""}
+    local output_name="simple_profile"
+    if [ -n "$job_id" ]; then
+        output_name="${job_id}_simple"
+    fi
+    
+    build_image_if_needed
+    
+    echo -e "${YELLOW}🔍 Running simplified NVTX profiling session...${NC}"
+    echo -e "${BLUE}📁 Profiler output will be saved to: ./profiling_output/${output_name}.nsys-rep${NC}"
+    echo -e "${BLUE}📊 GPU metrics: Graphics, DRAM, SM utilization${NC}"
+    docker compose run --rm profiling \
+        nsys profile --trace=nvtx,cuda \
+        --force-overwrite=true \
+        --cuda-memory-usage=true \
+        --gpu-metrics-device=all \
+        --gpu-metrics-frequency=20000 \
+        --gpu-metrics-set=gr,dram,sm \
+        --process-scope=system-wide \
+        --output=/app/profiling_output/${output_name} \
+        uv run scripts/profile_training.py profile --max-epochs 2
+    
+    echo -e "${GREEN}✅ Simplified profiling complete! Check ./profiling_output/ for results${NC}"
+}
+
+# Function to run GPU-focused NVTX profiling (maximum GPU insights)
+run_gpu_profiling() {
+    local job_id=${1:-""}
+    local output_name="gpu_profile"
+    if [ -n "$job_id" ]; then
+        output_name="${job_id}_gpu"
+    fi
+    
+    build_image_if_needed
+    
+    echo -e "${YELLOW}🔍 Running GPU-focused NVTX profiling session...${NC}"
+    echo -e "${BLUE}📁 Profiler output will be saved to: ./profiling_output/${output_name}.nsys-rep${NC}"
+    echo -e "${BLUE}🚀 Maximum GPU metrics collection enabled${NC}"
+    echo -e "${BLUE}📊 GPU metrics: All available (GR, DRAM, NVL, PCIe, SM, Tensor, Power, Clocks)${NC}"
+    docker compose run --rm profiling \
+        nsys profile --trace=nvtx,cuda,osrt,cublas,cudnn,opengl \
+        --force-overwrite=true \
+        --cuda-memory-usage=true \
+        --gpu-metrics-device=all \
+        --gpu-metrics-frequency=5000 \
+        --gpu-metrics-set=all \
+        --wait=all \
+        --delay=3 \
+        --duration=180 \
+        --output=/app/profiling_output/${output_name} \
+        uv run scripts/profile_training.py profile --max-epochs 2 --num-workers 2 --batch-size 128
+    
+    echo -e "${GREEN}✅ GPU profiling complete! Check ./profiling_output/ for comprehensive GPU metrics${NC}"
 }
 
 # Function to start TensorBoard
@@ -631,11 +733,29 @@ case "${1:-help}" in
         ;;
     "train-nvtx")
         ensure_docker_running "train-nvtx"
-        run_training "nvtx" "${2:-5}" "${3:-64}"
+        run_training "nvtx" "${2:-5}" "${3:-64}" "${4:-}" "${5:-}"
         ;;
     "profile")
         ensure_docker_running "profile"
-        run_profiling
+        run_profiling "${2:-}" "${3:-}"
+        ;;
+    "profile-simple")
+        ensure_docker_running "profile-simple"
+        run_simple_profiling "${2:-}"
+        ;;
+    "profile-fast")
+        ensure_docker_running "profile-fast"
+        run_profiling "${2:-fast}" "4"  # Use 4 workers for maximum performance
+        ;;
+    "profile-gpu")
+        ensure_docker_running "profile-gpu"
+        run_gpu_profiling "${2:-}"
+        ;;
+    "test-dataloader")
+        ensure_docker_running "test-dataloader"
+        build_image_if_needed
+        echo -e "${YELLOW}🧪 Testing DataLoader for segmentation faults...${NC}"
+        docker compose run --rm profiling uv run scripts/validate_dataloader.py "${2:-256}" "${3:-0}"
         ;;
     "tensorboard")
         ensure_docker_running "tensorboard"
@@ -668,8 +788,12 @@ case "${1:-help}" in
         echo ""
         echo "Commands:"
         echo "  train [epochs] [batch_size]     - Train vanilla autoencoder (default: 10 epochs, 64 batch)"
-        echo "  train-nvtx [epochs] [batch_size] - Train with NVTX profiling + nsys capture (default: 5 epochs, 64 batch)"
-        echo "  profile                         - Run full NVTX profiling session (3 epochs, optimized)"
+        echo "  train-nvtx [epochs] [batch_size] [job_id] [num_workers] - Train with NVTX profiling + nsys capture (default: 5 epochs, 64 batch, 2 workers)"
+        echo "  profile [job_id] [num_workers]  - Run full NVTX profiling session (3 epochs, default: 2 workers)"
+        echo "  profile-simple [job_id]         - Run simplified NVTX profiling (avoids MMAP issues)"
+        echo "  profile-fast [job_id]           - Run fast NVTX profiling (4 workers, may have segfaults)"
+        echo "  profile-gpu [job_id]            - Run GPU-focused profiling (comprehensive GPU metrics)"
+        echo "  test-dataloader [batch_size] [num_workers] - Test DataLoader for segmentation faults (default: 256 batch, 0 workers)"
         echo "  tensorboard                     - Start TensorBoard service"
         echo "  shell                          - Start interactive bash shell"
         echo "  sync                           - Sync dependencies with uv"
@@ -681,7 +805,15 @@ case "${1:-help}" in
         echo "Examples:"
         echo "  $0 train 20 128                - Train for 20 epochs with batch size 128"
         echo "  $0 train-nvtx 5 64             - Train with NVTX for 5 epochs"
-        echo "  $0 profile                     - Run profiling session"
+        echo "  $0 train-nvtx 5 64 my_experiment - Train with NVTX and custom job ID"
+        echo "  $0 train-nvtx 5 256 gpu_test 4 - Train with 4 workers for faster data loading"
+        echo "  $0 profile                     - Run profiling session (2 workers default)"
+        echo "  $0 profile my_job              - Run profiling with custom job ID"
+        echo "  $0 profile my_job 4            - Run profiling with 4 workers"
+        echo "  $0 profile-simple              - Run simplified profiling (avoids MMAP errors)"
+        echo "  $0 profile-fast                - Run fast profiling (4 workers, riskier but faster)"
+        echo "  $0 profile-gpu gpu_analysis     - Run comprehensive GPU metrics profiling"
+        echo "  $0 test-dataloader             - Test DataLoader stability before profiling"
         echo "  $0 sync                        - Sync project dependencies"
         echo "  $0 uv add torch                - Add PyTorch dependency"
         echo "  $0 shell                       - Interactive development"

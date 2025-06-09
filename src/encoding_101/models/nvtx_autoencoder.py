@@ -23,6 +23,9 @@ class NVTXColors:
     VISUALIZATION = "pink"
     DATA_TRANSFER = "cyan"
     MEMORY = "magenta"
+    # Epoch-level markers
+    EPOCH_START = "lime"
+    EPOCH_END = "darkgreen"
 
 
 class NVTXVanillaAutoencoder(BaseAutoencoder):
@@ -34,6 +37,7 @@ class NVTXVanillaAutoencoder(BaseAutoencoder):
         super().__init__(latent_dim, visualize_mar, mar_viz_epochs, mar_samples_per_class)
         
         self.enable_nvtx = enable_nvtx
+        self._epoch_nvtx_context = None  # Store epoch-wide NVTX context
         
         # Build the same architecture as VanillaAutoencoder
         self.encoder_net = nn.Sequential(OrderedDict([
@@ -123,9 +127,24 @@ class NVTXVanillaAutoencoder(BaseAutoencoder):
             
             return loss
     
+    def on_train_epoch_start(self):
+        """Mark the start of training epoch with NVTX annotation"""
+        # Create epoch boundary markers
+        with self.nvtx_annotate(f"🚀 EPOCH {self.current_epoch} - TRAINING START", NVTXColors.EPOCH_START):
+            pass
+        
+        # Start epoch-wide range (will be closed in on_validation_epoch_end)
+        if self.enable_nvtx:
+            self._epoch_nvtx_context = nvtx.annotate(f"EPOCH {self.current_epoch} FULL CYCLE", color="white")
+            self._epoch_nvtx_context.__enter__()
+    
     def on_train_epoch_end(self):
         """Log training images with NVTX annotations"""
-        with self.nvtx_annotate(f"Train Epoch {self.current_epoch} End", NVTXColors.VISUALIZATION):
+        with self.nvtx_annotate(f"✅ EPOCH {self.current_epoch} - TRAINING END", NVTXColors.EPOCH_END):
+            # Add epoch boundary marker first
+            pass
+        
+        with self.nvtx_annotate(f"Train Epoch {self.current_epoch} Visualization", NVTXColors.VISUALIZATION):
             if len(self.train_imgs) > 0:
                 with self.nvtx_annotate("Create Train Comparison Grid", NVTXColors.VISUALIZATION):
                     image_tensor = create_comparison_grid(
@@ -139,9 +158,19 @@ class NVTXVanillaAutoencoder(BaseAutoencoder):
                         with self.nvtx_annotate("Log Train Images", NVTXColors.VISUALIZATION):
                             self.logger.experiment.add_image("train_comparison", image_tensor, self.current_epoch)
     
+    def on_validation_epoch_start(self):
+        """Mark the start of validation epoch with NVTX annotation"""
+        with self.nvtx_annotate(f"🔍 EPOCH {self.current_epoch} - VALIDATION START", NVTXColors.EPOCH_START):
+            # Clear boundary marker for validation phase
+            pass
+    
     def on_validation_epoch_end(self):
         """Enhanced validation epoch end with comprehensive NVTX annotations"""
-        with self.nvtx_annotate(f"Validation Epoch {self.current_epoch} End", NVTXColors.METRICS):
+        with self.nvtx_annotate(f"✅ EPOCH {self.current_epoch} - VALIDATION END", NVTXColors.EPOCH_END):
+            # Add epoch boundary marker first
+            pass
+        
+        with self.nvtx_annotate(f"Validation Epoch {self.current_epoch} Metrics", NVTXColors.METRICS):
             
             # Process validation images
             if len(self.val_imgs) > 0:
@@ -231,6 +260,11 @@ class NVTXVanillaAutoencoder(BaseAutoencoder):
                 self.val_embeddings = []
                 self.val_labels = []
                 self.val_images = []
+        
+        # Close epoch-wide NVTX range
+        if self.enable_nvtx and self._epoch_nvtx_context is not None:
+            self._epoch_nvtx_context.__exit__(None, None, None)
+            self._epoch_nvtx_context = None
     
     def configure_optimizers(self):
         """Configure optimizer with NVTX annotation for initialization"""

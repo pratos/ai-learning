@@ -57,7 +57,7 @@ services:
     build: .
     container_name: ai-learning-profiling
     ipc: host
-    shm_size: '2gb'
+    shm_size: '4gb'  # Increased shared memory for profiling
     ulimits:
       memlock: -1
       stack: 67108864
@@ -65,6 +65,15 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all  # Use '0' for single GPU
       - PYTHONPATH=/app
       - UV_LINK_MODE=copy
+      # Reduce PyTorch memory fragmentation during profiling
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+      - OMP_NUM_THREADS=1  # Reduce CPU thread contention
+      - CUDA_LAUNCH_BLOCKING=0  # Allow async CUDA operations
+      # Improve symbol resolution for nsys profiling
+      - LD_PRELOAD=
+      - NSYS_NVTX_PROFILER_REGISTER_ONLY=0
+      # Help with process tracking
+      - PYTHONUNBUFFERED=1
     volumes:
       - .:/app
       # Exclude virtual environment to use container's one

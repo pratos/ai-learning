@@ -20,6 +20,7 @@ def profile(
     enable_nvtx: bool = typer.Option(True, help="Enable NVTX annotations"),
     profile_first_n_batches: int = typer.Option(0, help="If > 0, only profile first N batches per epoch"),
     disable_mar_viz: bool = typer.Option(True, help="Disable MAR visualization for cleaner profiling"),
+    num_workers: int = typer.Option(0, help="Number of DataLoader workers (0=safe, 2-4=faster but may cause segfaults)"),
 ):
     """Run training with NVTX profiling enabled for performance analysis"""
     
@@ -30,6 +31,7 @@ def profile(
     typer.echo(f"Epochs: {max_epochs} (shortened for profiling)")
     typer.echo(f"Batch size: {batch_size}")
     typer.echo(f"Device: GPU {device_id}")
+    typer.echo(f"DataLoader workers: {num_workers} ({'⚠️  may cause segfaults' if num_workers > 0 else '✅ stable'})")
     typer.echo(f"MAR visualization: {'❌ disabled' if disable_mar_viz else '✅ enabled'}")
     
     if profile_first_n_batches > 0:
@@ -73,7 +75,7 @@ def profile(
             model_kwargs=model_kwargs,
             data_dir=data_dir,
             batch_size=batch_size,
-            num_workers=2,  # Fewer workers for cleaner profiling
+            num_workers=num_workers,
             device_id=device_id,
             max_epochs=max_epochs,
             debug=False,
