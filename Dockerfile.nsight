@@ -1,0 +1,35 @@
+# NVIDIA Nsight Streamer Dockerfile
+# Based on the official NGC container with custom configuration
+
+FROM nvcr.io/nvidia/devtools/nsight-streamer-nsys:2025.3.1
+
+# Set working directory
+WORKDIR /app
+
+# Install additional tools for better profiling experience
+RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
+    vim \
+    htop \
+    tree \
+    less \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create directories for mounted volumes
+RUN mkdir -p /mnt/host/volumes/reports \
+    /mnt/host/volumes/profiling_output \
+    /mnt/host/volumes/data
+
+# Set default environment variables
+ENV TURN_PORT=3478
+ENV ENABLE_RESIZE=true
+ENV MAX_RESOLUTION=1920x1080
+ENV WEB_USERNAME=nvidia
+ENV WEB_PASSWORD=nvidia
+
+# Expose ports
+EXPOSE 8080 3478
+
+# The base image already handles the entrypoint for the streamer
+# Don't override the CMD - let the base image handle startup 

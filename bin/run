@@ -331,10 +331,8 @@ run_nvtx_training() {
         --sample=cpu \
         --cpuctxsw=process-tree \
         --force-overwrite=true \
+        --pytorch=autograd-shapes-nvtx \
         --cuda-memory-usage=true \
-        --gpu-metrics-devices=all \
-        --gpu-metrics-frequency=10000 \
-        --gpu-metrics-set=gr,dram,nvl,pcie,sm,tensor \
         --wait=all \
         --delay=2 \
         --duration=300 \
@@ -355,6 +353,37 @@ start_tensorboard() {
     echo -e "${BLUE}📊 Starting TensorBoard...${NC}"
     docker compose up -d tensorboard
     echo -e "${GREEN}✅ TensorBoard running at http://localhost:6007${NC}"
+}
+
+# Function to start Nsight Streamer
+start_nsight_streamer() {
+    echo -e "${BLUE}🔍 Starting NVIDIA Nsight Streamer...${NC}"
+    echo -e "${YELLOW}📊 This will start a web-based profiling analysis tool${NC}"
+    
+    # Build the nsight streamer image
+    echo -e "${YELLOW}🔨 Building Nsight Streamer image...${NC}"
+    docker compose build nsight-streamer
+    
+    # Start the service
+    docker compose up -d nsight-streamer
+    
+    echo -e "${GREEN}✅ Nsight Streamer running at:${NC}"
+    echo -e "${BLUE}🌐 Web Interface: http://localhost:8080${NC}"
+    echo -e "${BLUE}🔐 Username: nvidia, Password: nvidia${NC}"
+    echo -e "${BLUE}📁 Profiling reports will be automatically detected from ./profiling_output/${NC}"
+    echo ""
+    echo -e "${YELLOW}💡 Tips:${NC}"
+    echo "  • Run 'train-nvtx' command first to generate profiling data"
+    echo "  • The web interface will auto-detect .nsys-rep files"
+    echo "  • Use Chrome/Firefox for best compatibility"
+    echo "  • Enable hardware acceleration for better performance"
+}
+
+# Function to stop Nsight Streamer
+stop_nsight_streamer() {
+    echo -e "${BLUE}🛑 Stopping NVIDIA Nsight Streamer...${NC}"
+    docker compose stop nsight-streamer
+    echo -e "${GREEN}✅ Nsight Streamer stopped${NC}"
 }
 
 # Function to run interactive shell
@@ -432,6 +461,14 @@ case "${1:-help}" in
         ensure_docker_running "tensorboard"
         start_tensorboard
         ;;
+    "nsight")
+        ensure_docker_running "nsight"
+        start_nsight_streamer
+        ;;
+    "nsight-stop")
+        ensure_docker_running "nsight-stop"
+        stop_nsight_streamer
+        ;;
     "shell")
         ensure_docker_running "shell"
         run_shell
@@ -447,6 +484,8 @@ case "${1:-help}" in
         echo "  train [epochs] [batch_size]               - Train vanilla autoencoder (default: 10 epochs, 64 batch)"
         echo "  train-nvtx [epochs] [batch_size] [job_id] [workers] - Train with NVTX profiling (default: 5 epochs, 256 batch, 2 workers)"
         echo "  tensorboard                               - Start TensorBoard service"
+        echo "  nsight                                    - Start NVIDIA Nsight Streamer (web profiling analysis)"
+        echo "  nsight-stop                               - Stop NVIDIA Nsight Streamer"
         echo "  shell                                     - Start interactive bash shell"
         echo "  cleanup                                   - Clean up Docker resources"
         echo "  help                                      - Show this help message"
@@ -456,6 +495,8 @@ case "${1:-help}" in
         echo "  $0 train-nvtx 5 256                      - NVTX profiling with 5 epochs, 256 batch size"
         echo "  $0 train-nvtx 3 512 gpu_experiment 4     - NVTX profiling with custom job ID and 4 workers"
         echo "  $0 tensorboard                           - Start TensorBoard on port 6007"
+        echo "  $0 nsight                                - Start Nsight Streamer on port 8080"
+        echo "  $0 nsight-stop                           - Stop Nsight Streamer"
         echo "  $0 shell                                 - Interactive development shell"
         echo "  $0 cleanup                               - Remove dangling Docker images"
         echo ""
@@ -464,6 +505,13 @@ case "${1:-help}" in
         echo "  • Epoch-level NVTX markers for clear timeline navigation"
         echo "  • CPU sampling and context switching tracking"
         echo "  • Output saved to ./profiling_output/[job_id]_[epochs]ep.nsys-rep"
+        echo ""
+        echo "Nsight Streamer Features:"
+        echo "  • Web-based profiling analysis via browser (http://localhost:8080)"
+        echo "  • Automatically detects .nsys-rep files from ./profiling_output/"
+        echo "  • Hardware-accelerated video streaming with NVIDIA GPU"
+        echo "  • Remote-friendly analysis without large file transfers"
+        echo "  • Username: nvidia, Password: nvidia (default)"
         echo ""
         echo "Installation:"
         echo "  This script will automatically install Docker, Docker Compose, and NVIDIA Docker runtime"

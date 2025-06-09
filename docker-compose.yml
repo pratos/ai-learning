@@ -92,3 +92,32 @@ services:
     tty: true
     stdin_open: true
     command: bash
+
+  # NVIDIA Nsight Streamer service (for web-based profiling analysis)
+  nsight-streamer:
+    build:
+      context: .
+      dockerfile: Dockerfile.nsight
+    container_name: ai-learning-nsight-streamer
+    environment:
+      - TURN_PORT=3478
+      - ENABLE_RESIZE=true
+      - MAX_RESOLUTION=1920x1080
+      - WEB_USERNAME=nvidia
+      - WEB_PASSWORD=nvidia
+    volumes:
+      # Mount profiling output for analysis
+      - ./profiling_output:/mnt/host/volumes/reports
+      - ./data:/mnt/host/volumes/data
+      - ./logs:/mnt/host/volumes/logs
+    ports:
+      - "8080:8080"  # HTTP port for web access
+      - "3478:3478"  # TURN port for WebRTC
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
