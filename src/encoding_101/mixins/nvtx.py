@@ -1,14 +1,11 @@
-from collections import OrderedDict
 from contextlib import nullcontext
 
 import nvtx
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from loguru import logger
 
 from src.encoding_101.metrics import compute_mar_at_k
-from src.encoding_101.models.base import BaseAutoencoder
 from src.encoding_101.utils import create_comparison_grid
 
 
@@ -28,31 +25,13 @@ class NVTXColors:
     EPOCH_END = "darkgreen"
 
 
-class NVTXVanillaAutoencoder(BaseAutoencoder):
-    """Vanilla Autoencoder with comprehensive NVTX profiling annotations"""
+class NVTXProfilingMixin:
+    """Mixin class that adds NVTX profiling capabilities to any autoencoder"""
     
-    def __init__(self, latent_dim: int = 128, visualize_mar: bool = False, 
-                 mar_viz_epochs: int = 5, mar_samples_per_class: int = 5,
-                 enable_nvtx: bool = True):
-        super().__init__(latent_dim, visualize_mar, mar_viz_epochs, mar_samples_per_class)
-        
+    def __init__(self, *args, enable_nvtx: bool = True, **kwargs):
+        super().__init__(*args, **kwargs)
         self.enable_nvtx = enable_nvtx
-        self._epoch_nvtx_context = None  # Store epoch-wide NVTX context
-        
-        # Build the same architecture as VanillaAutoencoder
-        self.encoder_net = nn.Sequential(OrderedDict([
-            ("encoder_flatten", nn.Flatten()),
-            ("encoder_linear1", nn.Linear(32 * 32 * 3, 1024)),
-            ("encoder_relu1", nn.ReLU()),
-            ("latent_space", nn.Linear(1024, self.latent_dim)),
-        ]))
-        
-        self.decoder_net = nn.Sequential(OrderedDict([
-            ("decoder_linear1", nn.Linear(self.latent_dim, 1024)),
-            ("decoder_relu1", nn.ReLU()),
-            ("decoder_linear2", nn.Linear(1024, 32 * 32 * 3)),
-            ("decoder_sigmoid", nn.Sigmoid()),
-        ]))
+        self._epoch_nvtx_context = None
     
     def nvtx_annotate(self, name: str, color: str = "white"):
         """Conditional NVTX annotation context manager"""
@@ -64,14 +43,12 @@ class NVTXVanillaAutoencoder(BaseAutoencoder):
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """Extract embeddings from input images with NVTX annotations"""
         with self.nvtx_annotate("Encoder Forward", NVTXColors.FORWARD):
-            return self.encoder_net(x)
+            return super().encode(x)
     
     def decode(self, z: torch.Tensor) -> torch.Tensor:
         """Decode embeddings to images with NVTX annotations"""
         with self.nvtx_annotate("Decoder Forward", NVTXColors.FORWARD):
-            decoded = self.decoder_net(z)
-            batch_size = z.shape[0]
-            return decoded.view(batch_size, 3, 32, 32)
+            return super().decode(z)
     
     def training_step(self, batch, batch_idx) -> torch.Tensor:
         with self.nvtx_annotate(f"Training Step {batch_idx}", NVTXColors.TRAIN):
@@ -137,11 +114,14 @@ class NVTXVanillaAutoencoder(BaseAutoencoder):
         if self.enable_nvtx:
             self._epoch_nvtx_context = nvtx.annotate(f"EPOCH {self.current_epoch} FULL CYCLE", color="white")
             self._epoch_nvtx_context.__enter__()
+        
+        # Call parent method if it exists
+        if hasattr(super(), 'on_train_epoch_start'):
+            super().on_train_epoch_start()
     
     def on_train_epoch_end(self):
         """Log training images with NVTX annotations"""
         with self.nvtx_annotate(f"✅ EPOCH {self.current_epoch} - TRAINING END", NVTXColors.EPOCH_END):
-            # Add epoch boundary marker first
             pass
         
         with self.nvtx_annotate(f"Train Epoch {self.current_epoch} Visualization", NVTXColors.VISUALIZATION):
@@ -157,17 +137,23 @@ class NVTXVanillaAutoencoder(BaseAutoencoder):
                     if image_tensor is not None:
                         with self.nvtx_annotate("Log Train Images", NVTXColors.VISUALIZATION):
                             self.logger.experiment.add_image("train_comparison", image_tensor, self.current_epoch)
+        
+        # Call parent method if it exists
+        if hasattr(super(), 'on_train_epoch_end'):
+            super().on_train_epoch_end()
     
     def on_validation_epoch_start(self):
         """Mark the start of validation epoch with NVTX annotation"""
         with self.nvtx_annotate(f"🔍 EPOCH {self.current_epoch} - VALIDATION START", NVTXColors.EPOCH_START):
-            # Clear boundary marker for validation phase
             pass
+        
+        # Call parent method if it exists
+        if hasattr(super(), 'on_validation_epoch_start'):
+            super().on_validation_epoch_start()
     
     def on_validation_epoch_end(self):
         """Enhanced validation epoch end with comprehensive NVTX annotations"""
         with self.nvtx_annotate(f"✅ EPOCH {self.current_epoch} - VALIDATION END", NVTXColors.EPOCH_END):
-            # Add epoch boundary marker first
             pass
         
         with self.nvtx_annotate(f"Validation Epoch {self.current_epoch} Metrics", NVTXColors.METRICS):
@@ -265,11 +251,16 @@ class NVTXVanillaAutoencoder(BaseAutoencoder):
         if self.enable_nvtx and self._epoch_nvtx_context is not None:
             self._epoch_nvtx_context.__exit__(None, None, None)
             self._epoch_nvtx_context = None
+        
+        # Call parent method if it exists
+        if hasattr(super(), 'on_validation_epoch_end'):
+            super().on_validation_epoch_end()
     
     def configure_optimizers(self):
         """Configure optimizer with NVTX annotation for initialization"""
         with self.nvtx_annotate("Configure Optimizer", NVTXColors.METRICS):
-            return torch.optim.Adam(self.parameters(), lr=1e-4)
+            return super().configure_optimizers()
+
 
 
 class NVTXProfiler:

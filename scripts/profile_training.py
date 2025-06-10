@@ -1,7 +1,7 @@
 import torch
 import typer
 
-from src.encoding_101.models.nvtx_autoencoder import NVTXProfiler, NVTXVanillaAutoencoder
+from src.encoding_101.models.autoencoder_annotated import NVTXVanillaAutoencoder
 from src.encoding_101.training.trainer import train_autoencoder
 
 app = typer.Typer(
@@ -139,49 +139,6 @@ def test_nvtx():
         typer.echo("Install NVTX with: pip install nvtx")
     except Exception as e:
         typer.echo(f"❌ Test failed: {e}")
-
-
-@app.command()
-def profile_dataloader():
-    """Profile only the data loading performance"""
-    
-    typer.echo("📁 Profiling data loader performance...")
-    
-    try:
-        import nvtx
-        from src.encoding_101 import CIFAR10DataModule
-        from src.encoding_101.models.nvtx_autoencoder import NVTXProfiler
-        
-        # Setup data module
-        data_module = CIFAR10DataModule(
-            data_dir="./data",
-            batch_size=64,
-            num_workers=4,
-        )
-        data_module.prepare_data()
-        data_module.setup()
-        
-        # Profile training dataloader
-        profiler = NVTXProfiler(enabled=True)
-        train_loader = data_module.train_dataloader()
-        
-        typer.echo("🔍 Profiling training dataloader (first 10 batches)...")
-        
-        for batch_idx, batch in profiler.profile_dataloader(train_loader, max_batches=10, phase="train"):
-            with profiler.annotate(f"Process Batch {batch_idx}", "yellow"):
-                # Simulate some processing
-                x, y = batch
-                # Move to GPU if available
-                if torch.cuda.is_available():
-                    x = x.cuda()
-                    y = y.cuda()
-        
-        typer.echo("✅ Dataloader profiling complete!")
-        typer.echo("Use: nsys profile --trace=nvtx python scripts/profile_training.py profile-dataloader")
-        
-    except Exception as e:
-        typer.echo(f"❌ Dataloader profiling failed: {e}")
-
 
 if __name__ == "__main__":
     app() 
