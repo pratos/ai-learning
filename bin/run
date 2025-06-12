@@ -654,6 +654,89 @@ check_ngc_packages() {
     echo -e "${BLUE}💡 Full list in ngc_packages.txt${NC}"
 }
 
+# Function to run training locally with uv (no Docker)
+run_local_training() {
+    local model_name=${1:-"NVTXVanillaAutoencoder"}
+    local epochs=${2:-10}
+    local batch_size=${3:-64}
+    local enable_profiling=${4:-false}
+    local job_id=${5:-"training"}
+    local num_workers=${6:-0}
+    
+    echo -e "${BLUE}🏠 Running training locally with uv...${NC}"
+    
+    # Check if uv is available
+    if ! command -v uv &> /dev/null; then
+        echo -e "${RED}❌ uv not found. Please run: $0 setup${NC}"
+        echo -e "${BLUE}💡 This will install uv and set up the local environment${NC}"
+        return 1
+    fi
+    
+    # Check if pyproject.toml exists
+    if [ ! -f "pyproject.toml" ]; then
+        echo -e "${RED}❌ pyproject.toml not found. Are you in the project root?${NC}"
+        return 1
+    fi
+    
+    # Check if virtual environment exists
+    if [ ! -d ".venv" ]; then
+        echo -e "${YELLOW}⚠️  Virtual environment not found. Please run: $0 setup${NC}"
+        echo -e "${BLUE}💡 This will create .venv and install dependencies${NC}"
+        return 1
+    fi
+    
+    # Determine if this is a profiling run
+    if [[ "$enable_profiling" == "true" ]]; then
+        echo -e "${YELLOW}🔍 Training with profiling (local):${NC}"
+        echo "  Model: $model_name"
+        echo "  Epochs: $epochs"
+        echo "  Batch size: $batch_size"
+        echo "  Job ID: $job_id"
+        echo "  Workers: $num_workers"
+        echo -e "${BLUE}📁 Output: ./profiling_output/${job_id}_${model_name}_${epochs}ep.json${NC}"
+        echo -e "${YELLOW}⚠️  Note: NVTX profiling requires Docker. Use 'train' command for full profiling.${NC}"
+        
+        # Run profiling locally (without nsys/NVTX)
+        uv run python scripts/profile_training.py profile \
+            --model-name "$model_name" \
+            --max-epochs $epochs \
+            --batch-size $batch_size \
+            --num-workers $num_workers \
+            --no-enable-nvtx
+    else
+        echo -e "${BLUE}🚀 Starting standard training (local):${NC}"
+        echo "  Model: $model_name"
+        echo "  Epochs: $epochs"
+        echo "  Batch size: $batch_size"
+        echo "  Workers: $num_workers"
+        
+        uv run python scripts/profile_training.py train \
+            --model-name "$model_name" \
+            --max-epochs $epochs \
+            --batch-size $batch_size \
+            --num-workers $num_workers
+    fi
+}
+
+# Function to list available models locally
+list_available_models_local() {
+    echo -e "${BLUE}📋 Available Models (local):${NC}"
+    
+    # Check if uv is available
+    if ! command -v uv &> /dev/null; then
+        echo -e "${RED}❌ uv not found. Please run: $0 setup${NC}"
+        return 1
+    fi
+    
+    # Check if virtual environment exists
+    if [ ! -d ".venv" ]; then
+        echo -e "${YELLOW}⚠️  Virtual environment not found. Please run: $0 setup${NC}"
+        return 1
+    fi
+    
+    uv run python scripts/profile_training.py list-models
+}
+
 # Function to set up local development environment with uv (no Docker)
 setup_local_env() {
     echo -e "${YELLOW}🛠️  Setting up local development environment with uv...${NC}"
@@ -848,6 +931,17 @@ case "${1:-help}" in
         ensure_docker_running "nsight-stop"
         stop_nsight_streamer
         ;;
+    "train-local")
+        # train-local [model] [epochs] [batch_size] [--profile] [job_id] [workers]
+        if [[ "${5:-}" == "--profile" ]]; then
+            run_local_training "${2:-NVTXVanillaAutoencoder}" "${3:-10}" "${4:-64}" "true" "${6:-training_profile}" "${7:-2}"
+        else
+            run_local_training "${2:-NVTXVanillaAutoencoder}" "${3:-10}" "${4:-64}" "false" "${5:-training}" "${6:-0}"
+        fi
+        ;;
+    "list-models-local")
+        list_available_models_local
+        ;;
     "setup")
         setup_local_env
         ;;
@@ -873,9 +967,11 @@ case "${1:-help}" in
         echo "Commands:"
         echo "  setup                                     - Set up local development environment with uv (no Docker)"
         echo "  train [model] [epochs] [batch_size] [--profile] [job_id] [workers] - Train autoencoder (default: NVTXVanillaAutoencoder, 10 epochs, 64 batch)"
+        echo "  train-local [model] [epochs] [batch_size] [--profile] [job_id] [workers] - Train autoencoder locally with uv (no Docker)"
         echo "  train-nvtx [epochs] [batch_size] [job_id] [workers] [model] - Legacy NVTX profiling (default: 5 epochs, 256 batch, 2 workers)"
         echo "  profile [model] [epochs] [batch_size] [job_id] [workers] - Legacy model profiling (default: NVTXVanillaAutoencoder, 5 epochs, 256 batch, 2 workers)"
         echo "  list-models                               - List all available autoencoder models"
+        echo "  list-models-local                         - List all available autoencoder models (local uv environment)"
         echo "  export-requirements                       - Export requirements.txt excluding NGC pre-installed packages"
         echo "  check-ngc-packages                        - Check what packages are installed in NGC container"
         echo "  tensorboard                               - Start TensorBoard service"
@@ -891,10 +987,16 @@ case "${1:-help}" in
         echo "  🛠️  Local Development Setup:"
         echo "  $0 setup                                 - Set up local dev environment with uv (recommended first step)"
         echo ""
-        echo "  🎯 Unified Training Command (Recommended):"
+        echo "  🏠 Local Training (No Docker):"
+        echo "  $0 train-local                           - Train default model locally (NVTXVanillaAutoencoder, 10 epochs, 64 batch)"
+        echo "  $0 train-local CNNAutoencoder 20 128     - Train CNN model locally for 20 epochs with batch size 128"
+        echo "  $0 train-local VanillaAutoencoder 5 256 --profile local_test 2 - Train with local profiling"
+        echo "  $0 list-models-local                     - Show all available models (local environment)"
+        echo ""
+        echo "  🎯 Docker Training (Full Features):"
         echo "  $0 train                                  - Train default model (NVTXVanillaAutoencoder, 10 epochs, 64 batch)"
         echo "  $0 train CNNAutoencoder 20 128           - Train CNN model for 20 epochs with batch size 128"
-        echo "  $0 train NVTXVanillaAutoencoder 5 256 --profile gpu_test 2 - Train with profiling"
+        echo "  $0 train NVTXVanillaAutoencoder 5 256 --profile gpu_test 2 - Train with NVTX profiling"
         echo "  $0 train VanillaAutoencoder 10 64        - Train vanilla model (no profiling)"
         echo ""
         echo "  📋 Model Discovery:"
