@@ -156,11 +156,8 @@ install_nvidia_docker() {
             # Install NVIDIA Docker
             sudo apt-get install -y nvidia-docker2
             
-            # Restart Docker daemon to load new runtime
-            echo -e "${BLUE}🔄 Restarting Docker to load NVIDIA runtime...${NC}"
-            sudo systemctl restart docker
-            
             echo -e "${GREEN}✅ NVIDIA Docker runtime installed successfully${NC}"
+            echo -e "${YELLOW}⚠️  Please restart Docker manually if needed: sudo systemctl restart docker${NC}"
             ;;
         "rhel"|"centos"|"fedora")
             # Add NVIDIA package repositories
@@ -181,11 +178,8 @@ install_nvidia_docker() {
                 sudo yum install -y nvidia-docker2
             fi
             
-            # Restart Docker daemon to load new runtime
-            echo -e "${BLUE}🔄 Restarting Docker to load NVIDIA runtime...${NC}"
-            sudo systemctl restart docker
-            
             echo -e "${GREEN}✅ NVIDIA Docker runtime installed successfully${NC}"
+            echo -e "${YELLOW}⚠️  Please restart Docker manually if needed: sudo systemctl restart docker${NC}"
             ;;
         *)
             echo -e "${RED}❌ Unsupported distribution for NVIDIA Docker: $distro${NC}"
@@ -231,7 +225,6 @@ ensure_docker_running() {
                 echo ""
                 echo -e "${BLUE}💡 You can try:${NC}"
                 echo "  • sudo systemctl reload docker    # Reload config without restart"
-                echo "  • sudo systemctl restart docker   # Full restart if reload doesn't work"
                 echo "  • nvidia-smi                      # Check if NVIDIA drivers are working"
                 echo ""
                 echo -e "${YELLOW}⚠️  Continuing without NVIDIA runtime - GPU will work via container drivers${NC}"
@@ -267,13 +260,13 @@ if ! command -v docker &> /dev/null; then
     exit 0
 fi
 
-# Check if Docker Compose is available
-if ! docker compose version &> /dev/null; then
+# Check if Docker Compose is available (try plugin first, then standalone)
+if ! docker compose version &> /dev/null && ! docker-compose version &> /dev/null; then
     echo -e "${YELLOW}⚠️  Docker Compose not found. Installing Docker Compose...${NC}"
     install_docker_compose
     
-    # Verify installation worked
-    if ! docker compose version &> /dev/null; then
+    # Verify installation worked (check both plugin and standalone)
+    if ! docker compose version &> /dev/null && ! docker-compose version &> /dev/null; then
         echo -e "${RED}❌ Docker Compose installation failed. Please install manually.${NC}"
         echo "Visit: https://docs.docker.com/compose/install/"
         exit 1
@@ -284,64 +277,275 @@ fi
 
 # Docker and NVIDIA runtime checks are now handled per-command in ensure_docker_running()
 
+# Function to get the correct docker compose command
+get_compose_cmd() {
+    if docker compose version &> /dev/null; then
+        echo "docker compose"
+    elif docker-compose version &> /dev/null; then
+        echo "docker-compose"
+    else
+        echo "docker compose" # fallback
+    fi
+}
+
 # Function to build Docker image when needed
 build_image_if_needed() {
     echo -e "${YELLOW}🔨 Building Docker image with uv...${NC}"
-    docker compose build ai-learning
+    $(get_compose_cmd) build ai-learning
 }
 
-# Function to run training
-run_training() {
-    local epochs=${1:-10}
-    local batch_size=${2:-64}
+# Unified function to run training with optional profiling
+run_unified_training() {
+    local model_name=${1:-"NVTXVanillaAutoencoder"}
+    local epochs=${2:-10}
+    local batch_size=${3:-64}
+    local enable_profiling=${4:-false}
+    local job_id=${5:-"training"}
+    local num_workers=${6:-0}
     
     build_image_if_needed
     
-    echo -e "${BLUE}🚀 Starting standard training with:${NC}"
-    echo "  Epochs: $epochs"
-    echo "  Batch size: $batch_size"
-    
-    docker compose run --rm ai-learning \
-        uv run python -m src.encoding_101.01_vanilla_autoencoder train-ae \
-        --max-epochs $epochs \
-        --batch-size $batch_size
+    # Determine if this is a profiling run
+    if [[ "$enable_profiling" == "true" ]]; then
+        echo -e "${YELLOW}🔍 Training with profiling:${NC}"
+        echo "  Model: $model_name"
+        echo "  Epochs: $epochs"
+        echo "  Batch size: $batch_size"
+        echo "  Job ID: $job_id"
+        echo "  Workers: $num_workers"
+        echo -e "${BLUE}📁 Output: ./profiling_output/${job_id}_${model_name}_${epochs}ep.nsys-rep${NC}"
+        echo -e "${BLUE}📊 GPU metrics: Graphics, DRAM, NVLink, PCIe, SM, Tensor Core${NC}"
+        
+        # Check if model supports NVTX for proper profiling
+        local use_nsys_profiling="false"
+        if [[ "$model_name" == *"NVTX"* ]]; then
+            use_nsys_profiling="true"
+        fi
+        
+        if [[ "$use_nsys_profiling" == "true" ]]; then
+            # Use nsys profiling for NVTX models
+            $(get_compose_cmd) run --rm profiling \
+                nsys profile \
+                --trace=nvtx,cuda,osrt,cublas,cudnn \
+                --backtrace=dwarf \
+                --sample=cpu \
+                --cpuctxsw=process-tree \
+                --force-overwrite=true \
+                --pytorch=autograd-shapes-nvtx \
+                --cuda-memory-usage=true \
+                --wait=all \
+                --delay=2 \
+                --duration=300 \
+                --output=/app/profiling_output/${job_id}_${model_name}_${epochs}ep \
+                python scripts/profile_training.py profile \
+                --model-name "$model_name" \
+                --max-epochs $epochs \
+                --batch-size $batch_size \
+                --num-workers $num_workers \
+                --enable-nvtx
+        else
+            # Regular profiling for non-NVTX models
+            $(get_compose_cmd) run --rm ai-learning \
+                python scripts/profile_training.py profile \
+                --model-name "$model_name" \
+                --max-epochs $epochs \
+                --batch-size $batch_size \
+                --num-workers $num_workers \
+                --no-enable-nvtx
+        fi
+    else
+        echo -e "${BLUE}🚀 Starting standard training:${NC}"
+        echo "  Model: $model_name"
+        echo "  Epochs: $epochs"
+        echo "  Batch size: $batch_size"
+        echo "  Workers: $num_workers"
+        
+        $(get_compose_cmd) run --rm ai-learning \
+            python scripts/profile_training.py train \
+            --model-name "$model_name" \
+            --max-epochs $epochs \
+            --batch-size $batch_size \
+            --num-workers $num_workers
+    fi
 }
 
-# Function to run NVTX profiling training
-run_nvtx_training() {
-    local epochs=${1:-5}
-    local batch_size=${2:-256}
-    local job_id=${3:-"training_profile"}
-    local num_workers=${4:-2}
-    
+# Function to list available models
+list_available_models() {
     build_image_if_needed
     
-    echo -e "${YELLOW}🔍 NVTX profiling training with:${NC}"
-    echo "  Epochs: $epochs"
-    echo "  Batch size: $batch_size"
-    echo "  Job ID: $job_id"
-    echo "  Workers: $num_workers"
-    echo -e "${BLUE}📁 Output: ./profiling_output/${job_id}_${epochs}ep.nsys-rep${NC}"
-    echo -e "${BLUE}📊 GPU metrics: Graphics, DRAM, NVLink, PCIe, SM, Tensor Core${NC}"
+    echo -e "${BLUE}📋 Available Models:${NC}"
+    $(get_compose_cmd) run --rm ai-learning \
+        python scripts/profile_training.py list-models
+}
+
+# Function to export requirements.txt with only pyproject.toml packages and their versions (runs locally)
+export_requirements() {
+    echo -e "${YELLOW}📦 Exporting requirements.txt from pyproject.toml packages (locally)...${NC}"
     
-    docker compose run --rm profiling \
-        nsys profile \
-        --trace=nvtx,cuda,osrt,cublas,cudnn \
-        --backtrace=dwarf \
-        --sample=cpu \
-        --cpuctxsw=process-tree \
-        --force-overwrite=true \
-        --pytorch=autograd-shapes-nvtx \
-        --cuda-memory-usage=true \
-        --wait=all \
-        --delay=2 \
-        --duration=300 \
-        --output=/app/profiling_output/${job_id}_${epochs}ep \
-        uv run scripts/profile_training.py profile \
-        --max-epochs $epochs \
-        --batch-size $batch_size \
-        --num-workers $num_workers \
-        --enable-nvtx
+    # Check if uv is available
+    if ! command -v uv &> /dev/null; then
+        echo -e "${RED}❌ uv not found. Installing uv...${NC}"
+        echo -e "${BLUE}ℹ️  Installing uv via curl...${NC}"
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        
+        # Add to PATH for current session
+        export PATH="$HOME/.cargo/bin:$PATH"
+        
+        # Check again
+        if ! command -v uv &> /dev/null; then
+            echo -e "${RED}❌ uv installation failed. Please install manually:${NC}"
+            echo "curl -LsSf https://astral.sh/uv/install.sh | sh"
+            echo "source ~/.bashrc"
+            return 1
+        fi
+        
+        echo -e "${GREEN}✅ uv installed successfully${NC}"
+    fi
+    
+    # List of packages typically pre-installed in NGC PyTorch containers
+    local ngc_packages=(
+        "torch" "torchvision" "torchaudio" "transformers" "tensorboard"
+        "matplotlib" "numpy" "scipy" "pandas" "pillow" "opencv-python" 
+        "opencv-python-headless" "scikit-learn" "jupyter" "ipython" 
+        "notebook" "jupyterlab" "seaborn" "plotly" "bokeh" "h5py" 
+        "pytables" "numba" "cupy" "cugraph" "cudf" "dask" "rapids"
+        "requests" "urllib3" "certifi" "charset-normalizer" "idna"
+        "setuptools" "wheel" "pip" "click" "typing-extensions" "packaging"
+        "pyyaml" "tqdm" "psutil" "six" "python-dateutil" "pytz"
+        "jinja2" "markupsafe" "werkzeug" "itsdangerous" "blinker"
+        "colorama" "rich" "typer"
+    )
+    
+    # Extract package names from pyproject.toml
+    echo -e "${BLUE}📋 Reading packages from pyproject.toml...${NC}"
+    local pyproject_packages=()
+    
+    # Parse dependencies from pyproject.toml
+    while IFS= read -r line; do
+        # Extract package name from pyproject.toml dependency line
+        # Example: "click==8.1.6", -> "click"
+        # Example: "lightning>=2.5.1.post0", -> "lightning"
+        if [[ $line =~ \"([^\"]+)\" ]]; then
+            # Extract the full dependency string (e.g., "click==8.1.6")
+            full_dep="${BASH_REMATCH[1]}"
+            # Extract just the package name (before any version specifier)
+            package_name=$(echo "$full_dep" | sed 's/[><=!].*//')
+            if [[ -n "$package_name" ]]; then
+                pyproject_packages+=("$package_name")
+                echo -e "${BLUE}📦 Found in pyproject.toml: $package_name${NC}"
+            fi
+        fi
+    done < <(grep -A 20 "dependencies = \[" pyproject.toml | grep '"' | head -20)
+    
+    if [ ${#pyproject_packages[@]} -eq 0 ]; then
+        echo -e "${RED}❌ No packages found in pyproject.toml dependencies${NC}"
+        return 1
+    fi
+    
+    echo -e "${BLUE}ℹ️  Found ${#pyproject_packages[@]} packages in pyproject.toml${NC}"
+    
+    # Fix permissions if needed
+    if [ -d "iv_workshops.egg-info" ] && [ ! -w "iv_workshops.egg-info" ]; then
+        echo -e "${YELLOW}⚠️  Fixing permissions for iv_workshops.egg-info...${NC}"
+        sudo chown -R $(whoami):$(whoami) iv_workshops.egg-info/ || true
+    fi
+    
+    # Export all requirements to get version information
+    echo -e "${BLUE}📋 Exporting full requirements from uv to get version info...${NC}"
+    if ! uv export --format requirements-txt --no-hashes > requirements_full.txt; then
+        echo -e "${RED}❌ Failed to export requirements. Trying to fix permissions...${NC}"
+        
+        # Remove problematic egg-info and try again
+        rm -rf iv_workshops.egg-info/
+        
+        if ! uv export --format requirements-txt --no-hashes > requirements_full.txt; then
+            echo -e "${RED}❌ Still failing. Please run manually:${NC}"
+            echo "rm -rf iv_workshops.egg-info/"
+            echo "uv export --format requirements-txt --no-hashes > requirements_full.txt"
+            return 1
+        fi
+    fi
+    
+    # Create filtered requirements.txt with only pyproject.toml packages (excluding NGC pre-installed)
+    echo -e "${BLUE}🔍 Extracting versions for pyproject.toml packages (excluding NGC packages)...${NC}"
+    cat > requirements.txt << EOF
+# Project dependencies from pyproject.toml with their locked versions
+# Generated on $(date)
+# Only includes packages from pyproject.toml that are NOT pre-installed in NGC containers
+# NGC containers already include: torch, torchvision, transformers, tensorboard, matplotlib, etc.
+EOF
+    
+    echo "" >> requirements.txt
+    
+    # Extract versions for pyproject.toml packages only, excluding NGC packages
+    for pkg in "${pyproject_packages[@]}"; do
+        # Check if package is in NGC pre-installed list
+        local is_ngc_package=false
+        for ngc_pkg in "${ngc_packages[@]}"; do
+            if [[ "${pkg,,}" == "${ngc_pkg,,}" ]]; then  # Case insensitive comparison
+                is_ngc_package=true
+                echo -e "${YELLOW}⏭️  Skipping NGC pre-installed package: $pkg${NC}"
+                break
+            fi
+        done
+        
+        # Only process if not an NGC package
+        if [[ "$is_ngc_package" == "false" ]]; then
+            # Find the package in the full requirements file (case insensitive)
+            local found_line=$(grep -i "^${pkg}==" requirements_full.txt | head -1)
+            
+            if [ -n "$found_line" ]; then
+                echo -e "${GREEN}✅ Adding: $found_line${NC}"
+                echo "$found_line" >> requirements.txt
+            else
+                # Try with different name variations (e.g., opencv-python-headless)
+                local alt_line=$(grep -i "^.*${pkg}.*==" requirements_full.txt | head -1)
+                if [ -n "$alt_line" ]; then
+                    echo -e "${GREEN}✅ Adding: $alt_line${NC}"
+                    echo "$alt_line" >> requirements.txt
+                else
+                    echo -e "${YELLOW}⚠️  Package $pkg not found in installed packages${NC}"
+                fi
+            fi
+        fi
+    done
+    
+    # Show summary
+    echo ""
+    echo -e "${BLUE}📊 Export Summary:${NC}"
+    echo -e "${BLUE}Packages in pyproject.toml: ${#pyproject_packages[@]}${NC}"
+    echo -e "${BLUE}NGC pre-installed packages skipped: $((${#pyproject_packages[@]} - $(grep -v '^#' requirements.txt | grep -v '^$' | wc -l)))${NC}"
+    echo -e "${BLUE}Packages exported: $(grep -v '^#' requirements.txt | grep -v '^$' | wc -l)${NC}"
+    echo ""
+    
+    # Cleanup
+    rm -f requirements_full.txt
+    
+    echo -e "${GREEN}✅ Requirements exported to requirements.txt${NC}"
+    echo -e "${BLUE}💡 Only packages from pyproject.toml that are NOT pre-installed in NGC containers${NC}"
+    
+    # Show the generated file
+    if [ -f requirements.txt ]; then
+        echo ""
+        echo -e "${YELLOW}📋 Generated requirements.txt:${NC}"
+        echo "----------------------------------------"
+        cat requirements.txt
+        echo "----------------------------------------"
+        echo -e "${BLUE}Total packages: $(grep -v '^#' requirements.txt | grep -v '^$' | wc -l)${NC}"
+        
+        # Show a note about potential conflicts
+        if [ $(grep -v '^#' requirements.txt | grep -v '^$' | wc -l) -eq 0 ]; then
+            echo ""
+            echo -e "${GREEN}🎉 All your pyproject.toml packages are pre-installed in NGC containers!${NC}"
+            echo -e "${BLUE}💡 Your Docker build should be very fast with no additional packages to install.${NC}"
+        else
+            echo ""
+            echo -e "${YELLOW}⚠️  If you encounter version conflicts during Docker build:${NC}"
+            echo -e "${BLUE}   1. The NGC container may have different versions of these packages${NC}"
+            echo -e "${BLUE}   2. Consider updating pyproject.toml to match NGC versions${NC}"
+            echo -e "${BLUE}   3. Or remove version pins (use >= instead of ==) for flexibility${NC}"
+        fi
+    fi
 }
 
 
@@ -351,7 +555,7 @@ start_tensorboard() {
     build_image_if_needed
     
     echo -e "${BLUE}📊 Starting TensorBoard...${NC}"
-    docker compose up -d tensorboard
+    $(get_compose_cmd) up -d tensorboard
     echo -e "${GREEN}✅ TensorBoard running at http://localhost:6007${NC}"
 }
 
@@ -362,10 +566,10 @@ start_nsight_streamer() {
     
     # Build the nsight streamer image
     echo -e "${YELLOW}🔨 Building Nsight Streamer image...${NC}"
-    docker compose build nsight-streamer
+    $(get_compose_cmd) build nsight-streamer
     
     # Start the service
-    docker compose up -d nsight-streamer
+    $(get_compose_cmd) up -d nsight-streamer
     
     echo -e "${GREEN}✅ Nsight Streamer running at:${NC}"
     echo -e "${BLUE}🌐 Web Interface: http://localhost:8080${NC}"
@@ -382,8 +586,70 @@ start_nsight_streamer() {
 # Function to stop Nsight Streamer
 stop_nsight_streamer() {
     echo -e "${BLUE}🛑 Stopping NVIDIA Nsight Streamer...${NC}"
-    docker compose stop nsight-streamer
+    $(get_compose_cmd) stop nsight-streamer
     echo -e "${GREEN}✅ Nsight Streamer stopped${NC}"
+}
+
+# Function to check what packages are actually installed in NGC container
+check_ngc_packages() {
+    echo -e "${YELLOW}🔍 Checking packages installed in NGC PyTorch container...${NC}"
+    
+    build_image_if_needed
+    
+    echo -e "${BLUE}📋 Getting list of installed packages from container...${NC}"
+    
+    # Get list of installed packages with versions
+    $(get_compose_cmd) run --rm ai-learning pip list --format=freeze > ngc_packages.txt
+    
+    echo -e "${GREEN}✅ Package list saved to ngc_packages.txt${NC}"
+    echo ""
+    echo -e "${BLUE}📊 Summary:${NC}"
+    echo -e "${BLUE}Total packages: $(wc -l < ngc_packages.txt)${NC}"
+    echo ""
+    
+    # Check if any of our pyproject.toml packages are installed
+    if [ -f pyproject.toml ]; then
+        echo -e "${YELLOW}🔍 Checking which pyproject.toml packages are pre-installed:${NC}"
+        echo ""
+        
+        # Parse pyproject.toml packages
+        local found_packages=()
+        while IFS= read -r line; do
+            if [[ $line =~ \"([^\"]+)\" ]]; then
+                full_dep="${BASH_REMATCH[1]}"
+                package_name=$(echo "$full_dep" | sed 's/[><=!].*//')
+                if [[ -n "$package_name" ]]; then
+                    # Check if package is in NGC container
+                    local ngc_version=$(grep -i "^${package_name}==" ngc_packages.txt | head -1)
+                    if [ -n "$ngc_version" ]; then
+                        echo -e "${GREEN}✅ $package_name: $ngc_version${NC}"
+                        found_packages+=("$package_name")
+                    else
+                        echo -e "${RED}❌ $package_name: Not found in NGC container${NC}"
+                    fi
+                fi
+            fi
+        done < <(grep -A 20 "dependencies = \[" pyproject.toml | grep '"' | head -20)
+        
+        echo ""
+        echo -e "${BLUE}📊 Results:${NC}"
+        echo -e "${BLUE}Pre-installed: ${#found_packages[@]} packages${NC}"
+        echo -e "${BLUE}Need to install: $(($(grep -A 20 "dependencies = \[" pyproject.toml | grep '"' | wc -l) - ${#found_packages[@]})) packages${NC}"
+    fi
+    
+    echo ""
+    echo -e "${YELLOW}💡 Tips:${NC}"
+    echo "  • Review ngc_packages.txt to see all available packages"
+    echo "  • Update your NGC package list in export_requirements() function"
+    echo "  • Consider using >= instead of == for version flexibility"
+    
+    # Show first 20 packages as preview
+    echo ""
+    echo -e "${BLUE}📋 First 20 packages (preview):${NC}"
+    echo "----------------------------------------"
+    head -20 ngc_packages.txt
+    echo "----------------------------------------"
+    echo -e "${BLUE}💡 Full list in ngc_packages.txt${NC}"
 }
 
 # Function to run interactive shell
@@ -391,7 +657,7 @@ run_shell() {
     build_image_if_needed
     
     echo -e "${BLUE}🐚 Starting interactive shell...${NC}"
-    docker compose run --rm ai-learning bash
+    $(get_compose_cmd) run --rm ai-learning bash
 }
 
 
@@ -447,15 +713,38 @@ docker_cleanup() {
     echo -e "${BLUE}💡 For aggressive cleanup: docker system prune -a${NC}"
 }
 
+
+
 # Parse command line arguments
 case "${1:-help}" in
     "train")
         ensure_docker_running "train"
-        run_training "${2:-10}" "${3:-64}"
+        # train [model] [epochs] [batch_size] [--profile] [job_id] [workers]
+        if [[ "${5:-}" == "--profile" ]]; then
+            run_unified_training "${2:-NVTXVanillaAutoencoder}" "${3:-10}" "${4:-64}" "true" "${6:-training_profile}" "${7:-2}"
+        else
+            run_unified_training "${2:-NVTXVanillaAutoencoder}" "${3:-10}" "${4:-64}" "false" "${5:-training}" "${6:-0}"
+        fi
         ;;
     "train-nvtx")
         ensure_docker_running "train-nvtx"
-        run_nvtx_training "${2:-5}" "${3:-256}" "${4:-training_profile}" "${5:-2}"
+        # Backward compatibility: train-nvtx [epochs] [batch_size] [job_id] [workers] [model] 
+        run_unified_training "${6:-NVTXVanillaAutoencoder}" "${2:-5}" "${3:-256}" "true" "${4:-training_profile}" "${5:-2}"
+        ;;
+    "profile")
+        ensure_docker_running "profile"
+        # Backward compatibility: profile [model] [epochs] [batch_size] [job_id] [workers]
+        run_unified_training "${2:-NVTXVanillaAutoencoder}" "${3:-5}" "${4:-256}" "true" "${5:-model_profile}" "${6:-2}"
+        ;;
+    "list-models")
+        ensure_docker_running "list-models"
+        list_available_models
+        ;;
+    "export-requirements")
+        export_requirements
+        ;;
+    "check-ngc-packages")
+        check_ngc_packages
         ;;
     "tensorboard")
         ensure_docker_running "tensorboard"
@@ -477,23 +766,48 @@ case "${1:-help}" in
         ensure_docker_running "cleanup"
         docker_cleanup
         ;;
+    "install-compose")
+        install_docker_compose
+        ;;
+    "install-nvidia-docker")
+        install_nvidia_docker
+        ;;
     "help"|*)
         echo -e "${BLUE}Usage: $0 [COMMAND] [OPTIONS]${NC}"
         echo ""
         echo "Commands:"
-        echo "  train [epochs] [batch_size]               - Train vanilla autoencoder (default: 10 epochs, 64 batch)"
-        echo "  train-nvtx [epochs] [batch_size] [job_id] [workers] - Train with NVTX profiling (default: 5 epochs, 256 batch, 2 workers)"
+        echo "  train [model] [epochs] [batch_size] [--profile] [job_id] [workers] - Train autoencoder (default: NVTXVanillaAutoencoder, 10 epochs, 64 batch)"
+        echo "  train-nvtx [epochs] [batch_size] [job_id] [workers] [model] - Legacy NVTX profiling (default: 5 epochs, 256 batch, 2 workers)"
+        echo "  profile [model] [epochs] [batch_size] [job_id] [workers] - Legacy model profiling (default: NVTXVanillaAutoencoder, 5 epochs, 256 batch, 2 workers)"
+        echo "  list-models                               - List all available autoencoder models"
+        echo "  export-requirements                       - Export requirements.txt excluding NGC pre-installed packages"
+        echo "  check-ngc-packages                        - Check what packages are installed in NGC container"
         echo "  tensorboard                               - Start TensorBoard service"
         echo "  nsight                                    - Start NVIDIA Nsight Streamer (web profiling analysis)"
         echo "  nsight-stop                               - Stop NVIDIA Nsight Streamer"
         echo "  shell                                     - Start interactive bash shell"
         echo "  cleanup                                   - Clean up Docker resources"
+        echo "  install-compose                           - Manually install Docker Compose"
         echo "  help                                      - Show this help message"
         echo ""
         echo "Examples:"
-        echo "  $0 train 20 128                          - Train for 20 epochs with batch size 128"
-        echo "  $0 train-nvtx 5 256                      - NVTX profiling with 5 epochs, 256 batch size"
-        echo "  $0 train-nvtx 3 512 gpu_experiment 4     - NVTX profiling with custom job ID and 4 workers"
+        echo ""
+        echo "  🎯 Unified Training Command (Recommended):"
+        echo "  $0 train                                  - Train default model (NVTXVanillaAutoencoder, 10 epochs, 64 batch)"
+        echo "  $0 train CNNAutoencoder 20 128           - Train CNN model for 20 epochs with batch size 128"
+        echo "  $0 train NVTXVanillaAutoencoder 5 256 --profile gpu_test 2 - Train with profiling"
+        echo "  $0 train VanillaAutoencoder 10 64        - Train vanilla model (no profiling)"
+        echo ""
+        echo "  📋 Model Discovery:"
+        echo "  $0 list-models                           - Show all available models"
+        echo ""
+        echo "  📦 Development Tools:"
+        echo "  $0 export-requirements                   - Export filtered requirements.txt for Docker"
+        echo ""
+        echo "  🔙 Legacy Commands (Backward Compatibility):"
+        echo "  $0 train-nvtx 5 256                      - NVTX profiling with default model"
+        echo "  $0 train-nvtx 3 512 gpu_experiment 4 NVTXCNNAutoencoder - NVTX profiling with CNN model"
+        echo "  $0 profile NVTXCNNAutoencoder 10 128     - Profile CNN model"
         echo "  $0 tensorboard                           - Start TensorBoard on port 6007"
         echo "  $0 nsight                                - Start Nsight Streamer on port 8080"
         echo "  $0 nsight-stop                           - Stop Nsight Streamer"

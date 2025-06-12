@@ -1,36 +1,59 @@
-# Git files
-.git
-.gitignore
-
-# Python cache
-__pycache__
+# Python
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
-*.so
-.pytest_cache
-.coverage
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Virtual environments (critical for uv Docker builds)
-.venv
+# Virtual environments
+.venv/
 venv/
+ENV/
 env/
 
-# IDE files
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# OS files
+# OS
 .DS_Store
 Thumbs.db
 
-# Data and logs (will be mounted as volumes)
-data/
+# Git
+.git/
+.gitignore
+
+# Logs and data
 logs/
+*.log
+data/
 profiling_output/
+
+# Development
+.pytest_cache/
+.coverage
+htmlcov/
+
+# UV specific (we're not using it in Docker now)
+uv.lock
+.uv-cache/
 
 # Documentation
 *.md
@@ -43,8 +66,4 @@ docs/
 # Temporary files
 *.tmp
 *.temp
-*~
-
-# Keep uv files for Docker builds
-!uv.lock
-!pyproject.toml 
+*~ 

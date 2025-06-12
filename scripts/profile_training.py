@@ -1,7 +1,9 @@
-import torch
+import inspect
+from typing import Dict, Type
+
 import typer
 
-from src.encoding_101.models.autoencoder_annotated import NVTXVanillaAutoencoder
+from src.encoding_101.models.base import BaseAutoencoder
 from src.encoding_101.training.trainer import train_autoencoder
 
 app = typer.Typer(
@@ -10,9 +12,87 @@ app = typer.Typer(
 )
 
 
+def get_available_models() -> Dict[str, Type[BaseAutoencoder]]:
+    """Dynamically discover all available autoencoder models"""
+    models = {}
+    
+    # Import all models from the models module
+    import src.encoding_101.models.autoencoder_annotated as annotated_module
+    import src.encoding_101.models.cnn_autoencoder as cnn_module
+    import src.encoding_101.models.vanilla_autoencoder as vanilla_module
+    
+    # Get all classes from each module that inherit from BaseAutoencoder
+    modules_to_scan = [vanilla_module, cnn_module, annotated_module]
+    
+    for module in modules_to_scan:
+        for name, obj in inspect.getmembers(module, inspect.isclass):
+            if (issubclass(obj, BaseAutoencoder) and 
+                obj != BaseAutoencoder and 
+                hasattr(obj, '__module__') and 
+                obj.__module__.startswith('src.encoding_101.models')):
+                models[name] = obj
+    
+    return models
+
+
+def list_available_models() -> str:
+    """Get a formatted string of available models"""
+    models = get_available_models()
+    model_list = []
+    
+    for name, model_class in sorted(models.items()):
+        # Get the module name to show where it comes from
+        module_name = model_class.__module__.split('.')[-1]
+        model_list.append(f"  • {name} (from {module_name})")
+    
+    return "\n".join(model_list)
+
+@app.command()
+def train(
+    model_name: str = typer.Option("NVTXVanillaAutoencoder", help="Name of the model class to train"),
+    latent_dim: int = typer.Option(128, help="Dimensionality of the latent space"),
+    batch_size: int = typer.Option(64, help="Batch size for training and validation"),
+    max_epochs: int = typer.Option(3, help="Maximum number of epochs (short for profiling)"),
+    device_id: int = typer.Option(0, help="GPU device ID to use"),
+    enable_nvtx: bool = typer.Option(True, help="Enable NVTX annotations"),
+    data_dir: str = typer.Option("./data", help="Directory where the data will be stored"),
+    num_workers: int = typer.Option(0, help="Number of DataLoader workers (0=safe, 2-4=faster but may cause segfaults)"),
+):
+    """Train the model"""
+    available_models = get_available_models()
+    if model_name not in available_models:
+        typer.echo(f"❌ Model '{model_name}' not found!")
+        typer.echo("\n📋 Available models:")
+        typer.echo(list_available_models())
+        raise typer.Exit(1)
+    
+    model_class = available_models[model_name]
+    
+    model_kwargs = {
+        "latent_dim": latent_dim,
+        "visualize_mar": False,
+        "mar_viz_epochs": 0,
+        "mar_samples_per_class": 0,
+        "enable_nvtx": enable_nvtx,
+    }
+    
+    model, trainer = train_autoencoder(
+        model_class=model_class,
+        model_kwargs=model_kwargs,
+        data_dir=data_dir,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        device_id=device_id,
+        max_epochs=max_epochs,
+        debug=True,
+    )
+    
+    typer.echo("✅ Training complete!")
+
 @app.command()
 def profile(
     data_dir: str = typer.Option("./data", help="Directory where the data will be stored"),
+    model_name: str = typer.Option("NVTXVanillaAutoencoder", help="Name of the model class to train"),
     latent_dim: int = typer.Option(128, help="Dimensionality of the latent space"),
     batch_size: int = typer.Option(64, help="Batch size for training and validation"),
     max_epochs: int = typer.Option(3, help="Maximum number of epochs (short for profiling)"),
@@ -24,9 +104,23 @@ def profile(
 ):
     """Run training with NVTX profiling enabled for performance analysis"""
     
+    # Get available models
+    available_models = get_available_models()
+    
+    # Validate model selection
+    if model_name not in available_models:
+        typer.echo(f"❌ Model '{model_name}' not found!")
+        typer.echo("\n📋 Available models:")
+        typer.echo(list_available_models())
+        typer.echo(f"\n💡 Example: python scripts/profile_training.py profile --model-name NVTXCNNAutoencoder")
+        raise typer.Exit(1)
+    
+    model_class = available_models[model_name]
+    
     # Print profiling information
     typer.echo("🔍 NVTX Training Profiler")
     typer.echo("=" * 50)
+    typer.echo(f"Model: {model_name}")
     typer.echo(f"NVTX annotations: {'✅ enabled' if enable_nvtx else '❌ disabled'}")
     typer.echo(f"Epochs: {max_epochs} (shortened for profiling)")
     typer.echo(f"Batch size: {batch_size}")
@@ -63,15 +157,19 @@ def profile(
         "visualize_mar": not disable_mar_viz,
         "mar_viz_epochs": max_epochs + 1 if disable_mar_viz else 2,  # Disable or reduce frequency
         "mar_samples_per_class": 3,  # Fewer samples for faster profiling
-        "enable_nvtx": enable_nvtx,
     }
+    
+    # Add enable_nvtx parameter only if the model supports it
+    model_signature = inspect.signature(model_class.__init__)
+    if 'enable_nvtx' in model_signature.parameters:
+        model_kwargs["enable_nvtx"] = enable_nvtx
     
     # Run training
     try:
         typer.echo("🚀 Starting profiling run...")
         
         model, trainer = train_autoencoder(
-            model_class=NVTXVanillaAutoencoder,
+            model_class=model_class,
             model_kwargs=model_kwargs,
             data_dir=data_dir,
             batch_size=batch_size,
@@ -94,6 +192,17 @@ def profile(
     except Exception as e:
         typer.echo(f"❌ Error during profiling: {e}")
         raise
+
+
+@app.command() 
+def list_models():
+    """List all available autoencoder models"""
+    typer.echo("📋 Available Models:")
+    typer.echo("=" * 50)
+    typer.echo(list_available_models())
+    typer.echo()
+    typer.echo("💡 Usage:")
+    typer.echo("  python scripts/profile_training.py profile --model-name <MODEL_NAME>")
 
 
 @app.command()

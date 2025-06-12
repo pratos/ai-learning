@@ -1,0 +1,10 @@
+# Project dependencies from pyproject.toml with their locked versions
+# Generated on Thu Jun 12 07:41:45 UTC 2025
+# Only includes packages from pyproject.toml that are NOT pre-installed in NGC containers
+# NGC containers already include: torch, torchvision, transformers, tensorboard, matplotlib, etc.
+
+# click==8.1.6
+lightning==2.5.1.post0
+loguru==0.7.3
+nvtx==0.2.11
+typer==0.15.2
