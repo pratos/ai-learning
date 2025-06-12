@@ -425,31 +425,6 @@ uv run python scripts/hydra_training.py --config-name=experiment/my_experiment -
 - **[NVIDIA Nsight Systems](https://developer.nvidia.com/nsight-systems)** - Visual profiler for analyzing results
 - **[PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/)** - Training framework used
 
-## 🎯 Key Features
-
-### ✅ Configuration Management
-- **Hierarchical configs** with Hydra
-- **Experiment tracking** with automatic logging
-- **Parameter sweeps** and multi-run support
-- **Complete reproducibility** with config capture
-
-### ✅ Logging & Monitoring
-- **Pure loguru logging** with beautiful output
-- **Comprehensive log capture** (training, metrics, errors)
-- **Automatic log rotation** and compression
-- **TensorBoard integration** for visualization
-
-### ✅ Performance Profiling
-- **NVTX annotations** for semantic profiling
-- **Mixin-based design** for easy integration
-- **Color-coded timeline** analysis
-- **GPU utilization** monitoring
-
-### ✅ Model Architecture
-- **Modular design** with mixins
-- **NVTX-enabled models** for profiling
-- **MAR@5 visualization** for embedding analysis
-- **PyTorch Lightning** integration
 
 ---
 
