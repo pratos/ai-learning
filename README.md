@@ -367,55 +367,6 @@ bin/run hydra-train training.batch_size=32,64,128,256 --multirun
 uv run python scripts/hydra_training.py model=nvtx_vanilla_autoencoder,cnn_autoencoder --multirun
 ```
 
-### Custom Experiments
-
-Create your own experiment configurations in `configs/experiment/`:
-
-```yaml
-# configs/experiment/my_experiment.yaml
-# @package _global_
-defaults:
-  - /model: cnn_autoencoder
-  - /training: default
-  - _self_
-
-experiment_name: my_custom_experiment_${now:%Y%m%d_%H%M%S}
-
-model:
-  latent_dim: 512
-  visualize_mar: true
-  mar_viz_epochs: 1
-
-training:
-  max_epochs: 50
-  batch_size: 256
-  learning_rate: 5e-4
-
-hydra:
-  run:
-    dir: logs/experiments/${experiment_name}
-```
-
-### Configuration Validation
-
-```bash
-# Test configuration without training (local)
-bin/run train-local --cfg job
-
-# Test configuration without training (Docker)
-bin/run hydra-train --cfg job
-
-# Validate specific experiment (local)
-bin/run train-local --config-name=experiment/my_experiment --cfg job
-
-# Validate specific experiment (Docker)
-bin/run hydra-train --config-name=experiment/my_experiment --cfg job
-
-# Direct script usage (alternative)
-uv run python scripts/test_hydra_config.py
-uv run python scripts/hydra_training.py --config-name=experiment/my_experiment --cfg job
-```
-
 ## 📚 Learning Resources
 
 - **[Hydra Documentation](https://hydra.cc/)** - Configuration management framework
