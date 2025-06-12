@@ -252,30 +252,31 @@ ensure_docker_running() {
     fi
 }
 
-# Check if Docker is installed
-if ! command -v docker &> /dev/null; then
-    echo -e "${YELLOW}⚠️  Docker not found. Installing Docker...${NC}"
-    install_docker
-    echo -e "${BLUE}🔄 Please run this script again after logging out and back in.${NC}"
-    exit 0
-fi
-
-# Check if Docker Compose is available (try plugin first, then standalone)
-if ! docker compose version &> /dev/null && ! docker-compose version &> /dev/null; then
-    echo -e "${YELLOW}⚠️  Docker Compose not found. Installing Docker Compose...${NC}"
-    install_docker_compose
-    
-    # Verify installation worked (check both plugin and standalone)
-    if ! docker compose version &> /dev/null && ! docker-compose version &> /dev/null; then
-        echo -e "${RED}❌ Docker Compose installation failed. Please install manually.${NC}"
-        echo "Visit: https://docs.docker.com/compose/install/"
-        exit 1
+# Function to ensure Docker is installed and available
+ensure_docker_installed() {
+    # Check if Docker is installed
+    if ! command -v docker &> /dev/null; then
+        echo -e "${YELLOW}⚠️  Docker not found. Installing Docker...${NC}"
+        install_docker
+        echo -e "${BLUE}🔄 Please run this script again after logging out and back in.${NC}"
+        exit 0
     fi
-    
-    echo -e "${GREEN}✅ Docker Compose verified working${NC}"
-fi
 
-# Docker and NVIDIA runtime checks are now handled per-command in ensure_docker_running()
+    # Check if Docker Compose is available (try plugin first, then standalone)
+    if ! docker compose version &> /dev/null && ! docker-compose version &> /dev/null; then
+        echo -e "${YELLOW}⚠️  Docker Compose not found. Installing Docker Compose...${NC}"
+        install_docker_compose
+        
+        # Verify installation worked (check both plugin and standalone)
+        if ! docker compose version &> /dev/null && ! docker-compose version &> /dev/null; then
+            echo -e "${RED}❌ Docker Compose installation failed. Please install manually.${NC}"
+            echo "Visit: https://docs.docker.com/compose/install/"
+            exit 1
+        fi
+        
+        echo -e "${GREEN}✅ Docker Compose verified working${NC}"
+    fi
+}
 
 # Function to get the correct docker compose command
 get_compose_cmd() {
@@ -388,14 +389,15 @@ export_requirements() {
         echo -e "${BLUE}ℹ️  Installing uv via curl...${NC}"
         curl -LsSf https://astral.sh/uv/install.sh | sh
         
-        # Add to PATH for current session
-        export PATH="$HOME/.cargo/bin:$PATH"
+        # Add both possible installation paths to PATH for current session
+        export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
         
         # Check again
         if ! command -v uv &> /dev/null; then
             echo -e "${RED}❌ uv installation failed. Please install manually:${NC}"
             echo "curl -LsSf https://astral.sh/uv/install.sh | sh"
-            echo "source ~/.bashrc"
+            echo -e "${BLUE}💡 Then add to PATH: export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
+            echo -e "${BLUE}💡 Or restart your shell to pick up the PATH changes${NC}"
             return 1
         fi
         
@@ -652,6 +654,86 @@ check_ngc_packages() {
     echo -e "${BLUE}💡 Full list in ngc_packages.txt${NC}"
 }
 
+# Function to set up local development environment with uv (no Docker)
+setup_local_env() {
+    echo -e "${YELLOW}🛠️  Setting up local development environment with uv...${NC}"
+    
+    # Check if uv is available
+    if ! command -v uv &> /dev/null; then
+        echo -e "${RED}❌ uv not found. Installing uv...${NC}"
+        echo -e "${BLUE}ℹ️  Installing uv via curl...${NC}"
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        
+        # Add both possible installation paths to PATH for current session
+        export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+        
+        # Check again
+        if ! command -v uv &> /dev/null; then
+            echo -e "${RED}❌ uv installation failed. Please install manually:${NC}"
+            echo "curl -LsSf https://astral.sh/uv/install.sh | sh"
+            echo -e "${BLUE}💡 Then add to PATH: export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
+            echo -e "${BLUE}💡 Or restart your shell to pick up the PATH changes${NC}"
+            return 1
+        fi
+        
+        echo -e "${GREEN}✅ uv installed successfully${NC}"
+    else
+        echo -e "${GREEN}✅ uv is already installed${NC}"
+    fi
+    
+    # Check if pyproject.toml exists
+    if [ ! -f "pyproject.toml" ]; then
+        echo -e "${RED}❌ pyproject.toml not found. Are you in the project root?${NC}"
+        return 1
+    fi
+    
+    # Create virtual environment if it doesn't exist
+    if [ ! -d ".venv" ]; then
+        echo -e "${YELLOW}🔧 Creating virtual environment...${NC}"
+        uv venv
+        echo -e "${GREEN}✅ Virtual environment created at .venv${NC}"
+    else
+        echo -e "${BLUE}ℹ️  Virtual environment already exists at .venv${NC}"
+    fi
+    
+    # Install dependencies
+    echo -e "${YELLOW}📦 Installing project dependencies...${NC}"
+    if uv sync; then
+        echo -e "${GREEN}✅ Dependencies installed successfully${NC}"
+    else
+        echo -e "${RED}❌ Failed to install dependencies${NC}"
+        return 1
+    fi
+    
+    # Install the project in development mode
+    echo -e "${YELLOW}🔧 Installing project in development mode...${NC}"
+    if uv pip install -e .; then
+        echo -e "${GREEN}✅ Project installed in development mode${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Project installation failed, but dependencies are installed${NC}"
+    fi
+    
+    echo ""
+    echo -e "${GREEN}🎉 Local development environment setup complete!${NC}"
+    echo ""
+    echo -e "${BLUE}💡 To activate the environment:${NC}"
+    echo "  source .venv/bin/activate"
+    echo ""
+    echo -e "${BLUE}💡 To run scripts locally:${NC}"
+    echo "  uv run python scripts/profile_training.py --help"
+    echo "  uv run python scripts/profile_training.py list-models"
+    echo "  uv run python -m src.encoding_101.training.train --help"
+    echo ""
+    echo -e "${BLUE}💡 Alternative activation (fish shell):${NC}"
+    echo "  source .venv/bin/activate.fish"
+    echo ""
+    echo -e "${BLUE}💡 To deactivate later:${NC}"
+    echo "  deactivate"
+    echo ""
+    echo -e "${YELLOW}📝 Note: For GPU training, you'll need CUDA drivers installed locally${NC}"
+    echo -e "${BLUE}ℹ️  For containerized GPU training, use: $0 train${NC}"
+}
+
 # Function to run interactive shell
 run_shell() {
     build_image_if_needed
@@ -718,6 +800,7 @@ docker_cleanup() {
 # Parse command line arguments
 case "${1:-help}" in
     "train")
+        ensure_docker_installed
         ensure_docker_running "train"
         # train [model] [epochs] [batch_size] [--profile] [job_id] [workers]
         if [[ "${5:-}" == "--profile" ]]; then
@@ -727,16 +810,19 @@ case "${1:-help}" in
         fi
         ;;
     "train-nvtx")
+        ensure_docker_installed
         ensure_docker_running "train-nvtx"
         # Backward compatibility: train-nvtx [epochs] [batch_size] [job_id] [workers] [model] 
         run_unified_training "${6:-NVTXVanillaAutoencoder}" "${2:-5}" "${3:-256}" "true" "${4:-training_profile}" "${5:-2}"
         ;;
     "profile")
+        ensure_docker_installed
         ensure_docker_running "profile"
         # Backward compatibility: profile [model] [epochs] [batch_size] [job_id] [workers]
         run_unified_training "${2:-NVTXVanillaAutoencoder}" "${3:-5}" "${4:-256}" "true" "${5:-model_profile}" "${6:-2}"
         ;;
     "list-models")
+        ensure_docker_installed
         ensure_docker_running "list-models"
         list_available_models
         ;;
@@ -744,25 +830,34 @@ case "${1:-help}" in
         export_requirements
         ;;
     "check-ngc-packages")
+        ensure_docker_installed
         check_ngc_packages
         ;;
     "tensorboard")
+        ensure_docker_installed
         ensure_docker_running "tensorboard"
         start_tensorboard
         ;;
     "nsight")
+        ensure_docker_installed
         ensure_docker_running "nsight"
         start_nsight_streamer
         ;;
     "nsight-stop")
+        ensure_docker_installed
         ensure_docker_running "nsight-stop"
         stop_nsight_streamer
         ;;
+    "setup")
+        setup_local_env
+        ;;
     "shell")
+        ensure_docker_installed
         ensure_docker_running "shell"
         run_shell
         ;;
     "cleanup")
+        ensure_docker_installed
         ensure_docker_running "cleanup"
         docker_cleanup
         ;;
@@ -776,6 +871,7 @@ case "${1:-help}" in
         echo -e "${BLUE}Usage: $0 [COMMAND] [OPTIONS]${NC}"
         echo ""
         echo "Commands:"
+        echo "  setup                                     - Set up local development environment with uv (no Docker)"
         echo "  train [model] [epochs] [batch_size] [--profile] [job_id] [workers] - Train autoencoder (default: NVTXVanillaAutoencoder, 10 epochs, 64 batch)"
         echo "  train-nvtx [epochs] [batch_size] [job_id] [workers] [model] - Legacy NVTX profiling (default: 5 epochs, 256 batch, 2 workers)"
         echo "  profile [model] [epochs] [batch_size] [job_id] [workers] - Legacy model profiling (default: NVTXVanillaAutoencoder, 5 epochs, 256 batch, 2 workers)"
@@ -791,6 +887,9 @@ case "${1:-help}" in
         echo "  help                                      - Show this help message"
         echo ""
         echo "Examples:"
+        echo ""
+        echo "  🛠️  Local Development Setup:"
+        echo "  $0 setup                                 - Set up local dev environment with uv (recommended first step)"
         echo ""
         echo "  🎯 Unified Training Command (Recommended):"
         echo "  $0 train                                  - Train default model (NVTXVanillaAutoencoder, 10 epochs, 64 batch)"
