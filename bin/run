@@ -571,6 +571,45 @@ start_tensorboard() {
     echo -e "${GREEN}✅ TensorBoard running at http://localhost:6007${NC}"
 }
 
+# Function to start TensorBoard locally with uv
+start_tensorboard_local() {
+    echo -e "${BLUE}📊 Starting TensorBoard locally with uv...${NC}"
+    
+    # Check if uv is available
+    if ! command -v uv &> /dev/null; then
+        echo -e "${RED}❌ uv not found. Please run: $0 setup${NC}"
+        echo -e "${BLUE}💡 This will install uv and set up the local environment${NC}"
+        return 1
+    fi
+    
+    # Check if virtual environment exists
+    if [ ! -d ".venv" ]; then
+        echo -e "${YELLOW}⚠️  Virtual environment not found. Please run: $0 setup${NC}"
+        echo -e "${BLUE}💡 This will create .venv and install dependencies${NC}"
+        return 1
+    fi
+    
+    # Check if logs directory exists
+    if [ ! -d "logs/tensorboard_logs" ]; then
+        echo -e "${YELLOW}⚠️  No tensorboard logs found. Run some training first:${NC}"
+        echo -e "${BLUE}💡 $0 train-local${NC}"
+        echo -e "${BLUE}💡 $0 train${NC}"
+        echo ""
+        echo -e "${BLUE}📁 Creating logs/tensorboard_logs directory...${NC}"
+        mkdir -p logs/tensorboard_logs
+    fi
+    
+    echo -e "${BLUE}🚀 Starting TensorBoard on port 6006...${NC}"
+    echo -e "${BLUE}📁 Monitoring: ./logs/tensorboard_logs/${NC}"
+    echo -e "${BLUE}🌐 URL: http://localhost:6006${NC}"
+    echo ""
+    echo -e "${YELLOW}💡 Press Ctrl+C to stop TensorBoard${NC}"
+    echo ""
+    
+    # Run TensorBoard with uv
+    uv run tensorboard --logdir=logs/tensorboard_logs --host=0.0.0.0 --port=6006
+}
+
 # Function to start Nsight Streamer
 start_nsight_streamer() {
     echo -e "${BLUE}🔍 Starting NVIDIA Nsight Streamer...${NC}"
@@ -935,6 +974,10 @@ case "${1:-help}" in
         ensure_docker_running "tensorboard"
         start_tensorboard
         ;;
+    "tensorboard-uv")
+        show_local_banner
+        start_tensorboard_local
+        ;;
     "nsight")
         show_docker_banner
         ensure_docker_installed
@@ -995,7 +1038,8 @@ case "${1:-help}" in
         echo "  list-models-local                         - List all available autoencoder models (local uv environment)"
         echo "  export-requirements                       - Export requirements.txt excluding NGC pre-installed packages"
         echo "  check-ngc-packages                        - Check what packages are installed in NGC container"
-        echo "  tensorboard                               - Start TensorBoard service"
+        echo "  tensorboard                               - Start TensorBoard service (Docker)"
+        echo "  tensorboard-uv                            - Start TensorBoard locally with uv (no Docker)"
         echo "  nsight                                    - Start NVIDIA Nsight Streamer (web profiling analysis)"
         echo "  nsight-stop                               - Stop NVIDIA Nsight Streamer"
         echo "  shell                                     - Start interactive bash shell"
@@ -1013,12 +1057,14 @@ case "${1:-help}" in
         echo "  $0 train-local CNNAutoencoder 20 128     - Train CNN model locally for 20 epochs with batch size 128"
         echo "  $0 train-local VanillaAutoencoder 5 256 --profile local_test 2 - Train with local profiling"
         echo "  $0 list-models-local                     - Show all available models (local environment)"
+        echo "  $0 tensorboard-uv                        - Start TensorBoard locally on port 6006"
         echo ""
         echo "  🎯 Docker Training (Full Features):"
         echo "  $0 train                                  - Train default model (NVTXVanillaAutoencoder, 10 epochs, 64 batch)"
         echo "  $0 train CNNAutoencoder 20 128           - Train CNN model for 20 epochs with batch size 128"
         echo "  $0 train NVTXVanillaAutoencoder 5 256 --profile gpu_test 2 - Train with NVTX profiling"
         echo "  $0 train VanillaAutoencoder 10 64        - Train vanilla model (no profiling)"
+        echo "  $0 tensorboard                           - Start TensorBoard with Docker on port 6007"
         echo ""
         echo "  📋 Model Discovery:"
         echo "  $0 list-models                           - Show all available models"
@@ -1030,7 +1076,7 @@ case "${1:-help}" in
         echo "  $0 train-nvtx 5 256                      - NVTX profiling with default model"
         echo "  $0 train-nvtx 3 512 gpu_experiment 4 NVTXCNNAutoencoder - NVTX profiling with CNN model"
         echo "  $0 profile NVTXCNNAutoencoder 10 128     - Profile CNN model"
-        echo "  $0 tensorboard                           - Start TensorBoard on port 6007"
+        echo "  $0 tensorboard                           - Start TensorBoard with Docker on port 6007"
         echo "  $0 nsight                                - Start Nsight Streamer on port 8080"
         echo "  $0 nsight-stop                           - Stop Nsight Streamer"
         echo "  $0 shell                                 - Interactive development shell"
