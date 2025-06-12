@@ -14,6 +14,7 @@ ROOT_DIR = Path(__file__).parents[3]
 def train_autoencoder(
     model_class,
     model_kwargs: dict = None,
+    data_module=None,
     data_dir: str = "./data",
     batch_size: int = 64,
     num_workers: int = os.cpu_count() or 4,
@@ -28,9 +29,10 @@ def train_autoencoder(
     Args:
         model_class: The autoencoder class to instantiate
         model_kwargs: Keyword arguments to pass to the model constructor
-        data_dir: Directory where the data will be stored
-        batch_size: Batch size for training and validation
-        num_workers: Number of workers for DataLoader
+        data_module: Optional pre-instantiated data module (if None, creates CIFAR10DataModule)
+        data_dir: Directory where the data will be stored (used if data_module is None)
+        batch_size: Batch size for training and validation (used if data_module is None)
+        num_workers: Number of workers for DataLoader (used if data_module is None)
         device_id: GPU device ID to use
         max_epochs: Maximum number of epochs to train
         debug: Whether to run in debug mode
@@ -68,12 +70,16 @@ def train_autoencoder(
         callbacks=callbacks,
     )
     
-    # Setup data module
-    data_module = CIFAR10DataModule(
-        data_dir=data_dir,
-        batch_size=batch_size,
-        num_workers=num_workers,
-    )
+    # Setup data module - use provided one or create new one
+    if data_module is None:
+        logger.info("Creating CIFAR10DataModule with provided parameters")
+        data_module = CIFAR10DataModule(
+            data_dir=data_dir,
+            batch_size=batch_size,
+            num_workers=num_workers,
+        )
+    else:
+        logger.info("Using pre-instantiated data module")
     
     # Download the dataset if needed
     data_module.prepare_data()

@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 from .base import BaseAutoencoder
-
+from src.encoding_101.mixins.nvtx import NVTXProfilingMixin
 
 class VanillaAutoencoder(BaseAutoencoder):
     """Simple vanilla autoencoder with fully connected layers"""
@@ -35,4 +35,23 @@ class VanillaAutoencoder(BaseAutoencoder):
         """Decode embeddings to images"""
         decoded = self.decoder_net(z)
         batch_size = z.shape[0]
-        return decoded.view(batch_size, 3, 32, 32) 
+        return decoded.view(batch_size, 3, 32, 32)
+
+class NVTXVanillaAutoencoder(NVTXProfilingMixin, VanillaAutoencoder):
+    """Vanilla Autoencoder with comprehensive NVTX profiling annotations"""
+
+    def __init__(
+        self,
+        latent_dim: int = 128,
+        visualize_mar: bool = False,
+        mar_viz_epochs: int = 5,
+        mar_samples_per_class: int = 5,
+        enable_nvtx: bool = True,
+    ):
+        super().__init__(
+            latent_dim=latent_dim,
+            visualize_mar=visualize_mar,
+            mar_viz_epochs=mar_viz_epochs,
+            mar_samples_per_class=mar_samples_per_class,
+            enable_nvtx=enable_nvtx,
+        )

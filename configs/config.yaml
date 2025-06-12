@@ -1,0 +1,21 @@
+defaults:
+  - model: nvtx_vanilla_autoencoder
+  - training: default
+  - data: cifar10
+  - profiling: nvtx
+  - _self_
+
+# Experiment settings
+experiment_name: ${model.name}_${training.max_epochs}ep_${training.batch_size}bs
+output_dir: logs/tensorboard_logs
+
+# Override settings for different execution modes
+hydra:
+  run:
+    dir: logs/hydra_runs/${experiment_name}
+  job:
+    name: ${experiment_name}
+    
+# Global settings that can be interpolated
+device_id: 0
+debug: true 

@@ -1,0 +1,12 @@
+max_epochs: 10
+batch_size: 64
+num_workers: 0
+learning_rate: 1e-4
+
+# Lightning Trainer settings
+trainer:
+  accelerator: auto
+  devices: 
+    - ${device_id}
+  max_epochs: ${training.max_epochs}
+  precision: 16-mixed  # Use mixed precision for better performance 

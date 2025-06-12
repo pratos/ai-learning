@@ -927,6 +927,75 @@ docker_cleanup() {
     echo -e "${BLUE}💡 For aggressive cleanup: docker system prune -a${NC}"
 }
 
+# Function to run Hydra-based training (next-generation config management)
+run_hydra_training() {
+    local config_name=${1:-"config"}
+    local overrides=${2:-""}
+    local multirun=${3:-"false"}
+    
+    build_image_if_needed
+    
+    echo -e "${BLUE}🔮 Hydra-powered training with hierarchical configuration...${NC}"
+    echo "  Config: $config_name"
+    echo "  Overrides: $overrides"
+    echo "  Multirun: $multirun"
+    
+    # Build command
+    local cmd="python scripts/hydra_training.py --config-name=$config_name"
+    
+    # Add overrides if provided
+    if [[ -n "$overrides" ]]; then
+        cmd="$cmd $overrides"
+    fi
+    
+    # Add multirun flag if requested
+    if [[ "$multirun" == "true" ]]; then
+        cmd="$cmd --multirun"
+    fi
+    
+    echo -e "${YELLOW}🚀 Running: $cmd${NC}"
+    
+    $(get_compose_cmd) run --rm ai-learning $cmd
+}
+
+# Function to run Hydra-based training locally
+run_hydra_training_local() {
+    local config_name=${1:-"config"}
+    local overrides=${2:-""}
+    local multirun=${3:-"false"}
+    
+    echo -e "${BLUE}🏠 Running Hydra training locally with uv...${NC}"
+    
+    # Check if uv is available
+    if ! command -v uv &> /dev/null; then
+        echo -e "${RED}❌ uv not found. Please run: $0 setup${NC}"
+        return 1
+    fi
+    
+    # Check if virtual environment exists
+    if [ ! -d ".venv" ]; then
+        echo -e "${YELLOW}⚠️  Virtual environment not found. Please run: $0 setup${NC}"
+        return 1
+    fi
+    
+    # Build command
+    local cmd="python scripts/hydra_training.py --config-name=$config_name"
+    
+    # Add overrides if provided
+    if [[ -n "$overrides" ]]; then
+        cmd="$cmd $overrides"
+    fi
+    
+    # Add multirun flag if requested
+    if [[ "$multirun" == "true" ]]; then
+        cmd="$cmd --multirun"
+    fi
+    
+    echo -e "${YELLOW}🚀 Running: $cmd${NC}"
+    
+    uv run $cmd
+}
+
 # Parse command line arguments
 case "${1:-help}" in
     "train")
@@ -1025,6 +1094,16 @@ case "${1:-help}" in
     "install-nvidia-docker")
         install_nvidia_docker
         ;;
+    "hydra-train")
+        show_docker_banner
+        ensure_docker_installed
+        ensure_docker_running "hydra-train"
+        run_hydra_training "${2:-config}" "${3:-}" "${4:-false}"
+        ;;
+    "hydra-train-local")
+        show_local_banner
+        run_hydra_training_local "${2:-config}" "${3:-}" "${4:-false}"
+        ;;
     "help"|*)
         echo -e "${BLUE}Usage: $0 [COMMAND] [OPTIONS]${NC}"
         echo ""
@@ -1045,6 +1124,8 @@ case "${1:-help}" in
         echo "  shell                                     - Start interactive bash shell"
         echo "  cleanup                                   - Clean up Docker resources"
         echo "  install-compose                           - Manually install Docker Compose"
+        echo "  hydra-train                               - Run Hydra-based training (next-generation config management)"
+        echo "  hydra-train-local                         - Run Hydra-based training locally"
         echo "  help                                      - Show this help message"
         echo ""
         echo "Examples:"
@@ -1066,7 +1147,14 @@ case "${1:-help}" in
         echo "  $0 train VanillaAutoencoder 10 64        - Train vanilla model (no profiling)"
         echo "  $0 tensorboard                           - Start TensorBoard with Docker on port 6007"
         echo ""
-        echo "  📋 Model Discovery:"
+        echo "  🔮 Hydra-Powered Training (Next-Generation Config Management):"
+        echo "  $0 hydra-train                           - Train with default Hydra config"
+        echo "  $0 hydra-train config 'model=cnn_autoencoder'        - Train CNN model using Hydra"
+        echo "  $0 hydra-train config 'training.max_epochs=20 model.latent_dim=256' - Override parameters"
+        echo "  $0 hydra-train config 'model=nvtx_vanilla_autoencoder,cnn_autoencoder' true - Multi-run experiments"
+        echo "  $0 hydra-train-local experiment/cnn_comparison       - Run specific experiment locally"
+        echo ""
+        echo "  �� Model Discovery:"
         echo "  $0 list-models                           - Show all available models"
         echo ""
         echo "  📦 Development Tools:"

@@ -1,0 +1,9 @@
+# @package _global_
+model:
+  _target_: src.encoding_101.models.vanilla_autoencoder.NVTXVanillaAutoencoder
+  name: NVTXVanillaAutoencoder
+  latent_dim: 128
+  visualize_mar: true
+  mar_viz_epochs: 5
+  mar_samples_per_class: 5
+  enable_nvtx: true

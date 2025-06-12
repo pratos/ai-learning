@@ -1,0 +1,34 @@
+# @package _global_
+defaults:
+  - /model: cnn_autoencoder
+  - /training: default
+  - /data: cifar10
+  - /profiling: default
+  - _self_
+
+# Experiment-specific overrides
+experiment_name: cnn_autoencoder_${model.latent_dim}d_${model.batch_size}b_${training.max_epochs}ep_${now:%Y%m%d_%H%M%S}
+
+# Global settings
+device_id: 0
+debug: true
+output_dir: logs/tensorboard_logs
+
+model:
+  latent_dim: 256  # Larger latent space for CNN
+  visualize_mar: true
+  mar_viz_epochs: 2  # More frequent visualization
+  enable_nvtx: false
+
+training:
+  max_epochs: 20
+  batch_size: 128
+  learning_rate: 2e-4  # Slightly higher learning rate
+  # Enable mixed precision for faster training
+  # trainer:
+  #   precision: 16-mixed
+    
+# Specific logging for this experiment
+hydra:
+  run:
+    dir: logs/hydra_runs/${experiment_name}

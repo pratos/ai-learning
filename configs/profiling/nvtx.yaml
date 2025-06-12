@@ -1,0 +1,20 @@
+enable_nvtx: true
+profile_first_n_batches: 0  # 0 means profile all batches
+
+# NVTX profiling settings
+nvtx:
+  enable: ${profiling.enable_nvtx}
+  colors:
+    training: "green"
+    validation: "blue"
+    forward: "yellow"
+    loss: "orange"
+    metrics: "purple"
+
+# Nsys profiling settings (for bin/run integration)
+nsys:
+  trace: "nvtx,cuda,osrt,cublas,cudnn"
+  backtrace: "dwarf"
+  sample: "cpu"
+  duration: 300
+  delay: 2 
