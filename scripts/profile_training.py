@@ -57,6 +57,7 @@ def train(
     enable_nvtx: bool = typer.Option(True, help="Enable NVTX annotations"),
     data_dir: str = typer.Option("./data", help="Directory where the data will be stored"),
     num_workers: int = typer.Option(0, help="Number of DataLoader workers (0=safe, 2-4=faster but may cause segfaults)"),
+    experiment_name: str = typer.Option("training", help="Name of the experiment for logging directory"),
 ):
     """Train the model"""
     available_models = get_available_models()
@@ -85,6 +86,7 @@ def train(
         device_id=device_id,
         max_epochs=max_epochs,
         debug=True,
+        experiment_name=experiment_name,
     )
     
     typer.echo("✅ Training complete!")
@@ -101,6 +103,7 @@ def profile(
     profile_first_n_batches: int = typer.Option(0, help="If > 0, only profile first N batches per epoch"),
     disable_mar_viz: bool = typer.Option(True, help="Disable MAR visualization for cleaner profiling"),
     num_workers: int = typer.Option(0, help="Number of DataLoader workers (0=safe, 2-4=faster but may cause segfaults)"),
+    experiment_name: str = typer.Option("profiling", help="Name of the experiment for logging directory"),
 ):
     """Run training with NVTX profiling enabled for performance analysis"""
     
@@ -121,6 +124,7 @@ def profile(
     typer.echo("🔍 NVTX Training Profiler")
     typer.echo("=" * 50)
     typer.echo(f"Model: {model_name}")
+    typer.echo(f"Experiment: {experiment_name}")
     typer.echo(f"NVTX annotations: {'✅ enabled' if enable_nvtx else '❌ disabled'}")
     typer.echo(f"Epochs: {max_epochs} (shortened for profiling)")
     typer.echo(f"Batch size: {batch_size}")
@@ -177,6 +181,7 @@ def profile(
             device_id=device_id,
             max_epochs=max_epochs,
             debug=False,
+            experiment_name=experiment_name,
         )
         
         typer.echo("✅ Profiling run complete!")

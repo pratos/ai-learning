@@ -14,8 +14,17 @@ NC='\033[0m' # No Color
 # Enable Docker Bake for better build performance
 export COMPOSE_BAKE=true
 
-echo -e "${BLUE}🐳 AI Learning - Docker Runtime (uv-powered)${NC}"
-echo "============================================="
+# Function to show Docker banner
+show_docker_banner() {
+    echo -e "${BLUE}🐳 AI Learning - Docker Runtime (uv-powered)${NC}"
+    echo "============================================="
+}
+
+# Function to show local banner
+show_local_banner() {
+    echo -e "${GREEN}🏠 AI Learning - Local Development (uv-powered)${NC}"
+    echo "==============================================="
+}
 
 # Function to detect Linux distribution
 detect_distro() {
@@ -343,6 +352,7 @@ run_unified_training() {
                 --max-epochs $epochs \
                 --batch-size $batch_size \
                 --num-workers $num_workers \
+                --experiment-name "$job_id" \
                 --enable-nvtx
         else
             # Regular profiling for non-NVTX models
@@ -352,6 +362,7 @@ run_unified_training() {
                 --max-epochs $epochs \
                 --batch-size $batch_size \
                 --num-workers $num_workers \
+                --experiment-name "$job_id" \
                 --no-enable-nvtx
         fi
     else
@@ -366,7 +377,8 @@ run_unified_training() {
             --model-name "$model_name" \
             --max-epochs $epochs \
             --batch-size $batch_size \
-            --num-workers $num_workers
+            --num-workers $num_workers \
+            --experiment-name "$job_id"
     fi
 }
 
@@ -550,8 +562,6 @@ EOF
     fi
 }
 
-
-
 # Function to start TensorBoard
 start_tensorboard() {
     build_image_if_needed
@@ -702,6 +712,7 @@ run_local_training() {
             --max-epochs $epochs \
             --batch-size $batch_size \
             --num-workers $num_workers \
+            --experiment-name "$job_id" \
             --no-enable-nvtx
     else
         echo -e "${BLUE}🚀 Starting standard training (local):${NC}"
@@ -714,7 +725,8 @@ run_local_training() {
             --model-name "$model_name" \
             --max-epochs $epochs \
             --batch-size $batch_size \
-            --num-workers $num_workers
+            --num-workers $num_workers \
+            --experiment-name "$job_id"
     fi
 }
 
@@ -825,8 +837,6 @@ run_shell() {
     $(get_compose_cmd) run --rm ai-learning bash
 }
 
-
-
 # Function to clean up Docker resources
 docker_cleanup() {
     echo -e "${BLUE}🧹 Docker Cleanup${NC}"
@@ -878,11 +888,10 @@ docker_cleanup() {
     echo -e "${BLUE}💡 For aggressive cleanup: docker system prune -a${NC}"
 }
 
-
-
 # Parse command line arguments
 case "${1:-help}" in
     "train")
+        show_docker_banner
         ensure_docker_installed
         ensure_docker_running "train"
         # train [model] [epochs] [batch_size] [--profile] [job_id] [workers]
@@ -893,18 +902,21 @@ case "${1:-help}" in
         fi
         ;;
     "train-nvtx")
+        show_docker_banner
         ensure_docker_installed
         ensure_docker_running "train-nvtx"
         # Backward compatibility: train-nvtx [epochs] [batch_size] [job_id] [workers] [model] 
         run_unified_training "${6:-NVTXVanillaAutoencoder}" "${2:-5}" "${3:-256}" "true" "${4:-training_profile}" "${5:-2}"
         ;;
     "profile")
+        show_docker_banner
         ensure_docker_installed
         ensure_docker_running "profile"
         # Backward compatibility: profile [model] [epochs] [batch_size] [job_id] [workers]
         run_unified_training "${2:-NVTXVanillaAutoencoder}" "${3:-5}" "${4:-256}" "true" "${5:-model_profile}" "${6:-2}"
         ;;
     "list-models")
+        show_docker_banner
         ensure_docker_installed
         ensure_docker_running "list-models"
         list_available_models
@@ -913,25 +925,30 @@ case "${1:-help}" in
         export_requirements
         ;;
     "check-ngc-packages")
+        show_docker_banner
         ensure_docker_installed
         check_ngc_packages
         ;;
     "tensorboard")
+        show_docker_banner
         ensure_docker_installed
         ensure_docker_running "tensorboard"
         start_tensorboard
         ;;
     "nsight")
+        show_docker_banner
         ensure_docker_installed
         ensure_docker_running "nsight"
         start_nsight_streamer
         ;;
     "nsight-stop")
+        show_docker_banner
         ensure_docker_installed
         ensure_docker_running "nsight-stop"
         stop_nsight_streamer
         ;;
     "train-local")
+        show_local_banner
         # train-local [model] [epochs] [batch_size] [--profile] [job_id] [workers]
         if [[ "${5:-}" == "--profile" ]]; then
             run_local_training "${2:-NVTXVanillaAutoencoder}" "${3:-10}" "${4:-64}" "true" "${6:-training_profile}" "${7:-2}"
@@ -940,17 +957,21 @@ case "${1:-help}" in
         fi
         ;;
     "list-models-local")
+        show_local_banner
         list_available_models_local
         ;;
     "setup")
+        show_local_banner
         setup_local_env
         ;;
     "shell")
+        show_docker_banner
         ensure_docker_installed
         ensure_docker_running "shell"
         run_shell
         ;;
     "cleanup")
+        show_docker_banner
         ensure_docker_installed
         ensure_docker_running "cleanup"
         docker_cleanup

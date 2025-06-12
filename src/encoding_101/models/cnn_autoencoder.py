@@ -20,17 +20,19 @@ class CNNAutoencoder(BaseAutoencoder):
             ("encoder_relu2", nn.ReLU()),
             ("encoder_conv3", nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)),
             ("encoder_relu3", nn.ReLU()),
-            ("latent_space", nn.Linear(128, self.latent_dim)),
+            ("encoder_flatten", nn.Flatten()),
+            ("latent_space", nn.Linear(128 * 32 * 32, self.latent_dim)),
         ]))
         
         self.decoder_net = nn.Sequential(OrderedDict([
-            ("decoder_linear1", nn.Linear(self.latent_dim, 128)),
+            ("decoder_linear1", nn.Linear(self.latent_dim, 128 * 32 * 32)),
             ("decoder_relu1", nn.ReLU()),
-            ("decoder_linear2", nn.Linear(128, 64)),
+            ("decoder_reshape", nn.Unflatten(1, (128, 32, 32))),
+            ("decoder_conv1", nn.ConvTranspose2d(128, 64, kernel_size=3, stride=1, padding=1)),
             ("decoder_relu2", nn.ReLU()),
-            ("decoder_linear3", nn.Linear(64, 32)),
+            ("decoder_conv2", nn.ConvTranspose2d(64, 32, kernel_size=3, stride=1, padding=1)),
             ("decoder_relu3", nn.ReLU()),
-            ("decoder_linear4", nn.Linear(32, 32 * 32 * 3)),
+            ("decoder_conv3", nn.ConvTranspose2d(32, 3, kernel_size=3, stride=1, padding=1)),
             ("decoder_sigmoid", nn.Sigmoid()),
         ]))
     

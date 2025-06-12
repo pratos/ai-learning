@@ -20,6 +20,7 @@ def train_autoencoder(
     device_id: int = 0,
     max_epochs: int = 100,
     debug: bool = True,
+    experiment_name: str = "default_experiment",
 ):
     """
     Train an autoencoder model
@@ -33,6 +34,7 @@ def train_autoencoder(
         device_id: GPU device ID to use
         max_epochs: Maximum number of epochs to train
         debug: Whether to run in debug mode
+        experiment_name: Name of the experiment for logging directory
     
     Returns:
         Trained model and trainer
@@ -46,11 +48,15 @@ def train_autoencoder(
     ]
     
     # Setup logger
-    logger_dir = ROOT_DIR / "logs"
+    logger_dir = ROOT_DIR / "logs" / "tensorboard_logs"
     logger_dir.mkdir(parents=True, exist_ok=True)
-    tf_logger = TensorBoardLogger(save_dir=logger_dir)
+    tf_logger = TensorBoardLogger(
+        save_dir=logger_dir, 
+        name="", 
+        version=experiment_name
+    )
 
-    logger.info(f"TensorBoard logger active. Saved in directory: {tf_logger.save_dir}")
+    logger.info(f"TensorBoard logger active. Saved in directory: {tf_logger.log_dir}")
     
     # Setup trainer
     trainer = Trainer(

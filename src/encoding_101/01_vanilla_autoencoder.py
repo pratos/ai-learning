@@ -26,6 +26,7 @@ def train_ae(
     visualize_mar: bool = True,
     mar_viz_epochs: int = 5,
     mar_samples_per_class: int = 5,
+    experiment_name: str = "vanilla_autoencoder",
 ):
     """
     Train a vanilla autoencoder on CIFAR-10 dataset
@@ -41,6 +42,7 @@ def train_ae(
         visualize_mar: Whether to visualize MAR@5 during training
         mar_viz_epochs: How often to generate MAR@5 visualizations
         mar_samples_per_class: Number of samples per class for MAR@5 visualization
+        experiment_name: Name of the experiment for logging directory
     """
     model_kwargs = {
         "latent_dim": latent_dim,
@@ -58,6 +60,7 @@ def train_ae(
         device_id=device_id,
         max_epochs=max_epochs,
         debug=debug,
+        experiment_name=experiment_name,
     )
     
     return model, trainer

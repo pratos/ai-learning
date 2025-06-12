@@ -115,7 +115,7 @@ This metric helps evaluate whether the autoencoder learns meaningful representat
 Training automatically logs to TensorBoard:
 
 ```bash
-uv run tensorboard --logdir logs/
+uv run tensorboard --logdir logs/tensorboard_logs/
 ```
 
 You'll see:
@@ -123,3 +123,5 @@ You'll see:
 - MAR@5 metrics over time
 - Image reconstruction comparisons
 - MAR@k visualization summaries (if enabled)
+
+Each experiment gets its own directory named after the experiment (job_id from `bin/run` commands) instead of generic version numbers, making it easier to identify and compare different runs.
