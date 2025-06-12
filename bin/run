@@ -929,28 +929,19 @@ docker_cleanup() {
 
 # Function to run Hydra-based training (next-generation config management)
 run_hydra_training() {
-    local config_name=${1:-"config"}
-    local overrides=${2:-""}
-    local multirun=${3:-"false"}
+    local args=("$@")
     
     build_image_if_needed
     
     echo -e "${BLUE}🔮 Hydra-powered training with hierarchical configuration...${NC}"
-    echo "  Config: $config_name"
-    echo "  Overrides: $overrides"
-    echo "  Multirun: $multirun"
+    echo "  Args: ${args[*]}"
     
-    # Build command
-    local cmd="python scripts/hydra_training.py --config-name=$config_name"
+    # Build command - pass all arguments directly to the script
+    local cmd="python scripts/hydra_training.py"
     
-    # Add overrides if provided
-    if [[ -n "$overrides" ]]; then
-        cmd="$cmd $overrides"
-    fi
-    
-    # Add multirun flag if requested
-    if [[ "$multirun" == "true" ]]; then
-        cmd="$cmd --multirun"
+    # Add all arguments
+    if [[ ${#args[@]} -gt 0 ]]; then
+        cmd="$cmd ${args[*]}"
     fi
     
     echo -e "${YELLOW}🚀 Running: $cmd${NC}"
@@ -960,9 +951,7 @@ run_hydra_training() {
 
 # Function to run Hydra-based training locally
 run_hydra_training_local() {
-    local config_name=${1:-"config"}
-    local overrides=${2:-""}
-    local multirun=${3:-"false"}
+    local args=("$@")
     
     echo -e "${BLUE}🏠 Running Hydra training locally with uv...${NC}"
     
@@ -978,17 +967,12 @@ run_hydra_training_local() {
         return 1
     fi
     
-    # Build command
-    local cmd="python scripts/hydra_training.py --config-name=$config_name"
+    # Build command - pass all arguments directly to the script
+    local cmd="python scripts/hydra_training.py"
     
-    # Add overrides if provided
-    if [[ -n "$overrides" ]]; then
-        cmd="$cmd $overrides"
-    fi
-    
-    # Add multirun flag if requested
-    if [[ "$multirun" == "true" ]]; then
-        cmd="$cmd --multirun"
+    # Add all arguments
+    if [[ ${#args[@]} -gt 0 ]]; then
+        cmd="$cmd ${args[*]}"
     fi
     
     echo -e "${YELLOW}🚀 Running: $cmd${NC}"
@@ -1061,12 +1045,8 @@ case "${1:-help}" in
         ;;
     "train-local")
         show_local_banner
-        # train-local [model] [epochs] [batch_size] [--profile] [job_id] [workers]
-        if [[ "${5:-}" == "--profile" ]]; then
-            run_local_training "${2:-NVTXVanillaAutoencoder}" "${3:-10}" "${4:-64}" "true" "${6:-training_profile}" "${7:-2}"
-        else
-            run_local_training "${2:-NVTXVanillaAutoencoder}" "${3:-10}" "${4:-64}" "false" "${5:-training}" "${6:-0}"
-        fi
+        # Pass all arguments except the first one (command name)
+        run_hydra_training_local "${@:2}"
         ;;
     "list-models-local")
         show_local_banner
@@ -1098,11 +1078,13 @@ case "${1:-help}" in
         show_docker_banner
         ensure_docker_installed
         ensure_docker_running "hydra-train"
-        run_hydra_training "${2:-config}" "${3:-}" "${4:-false}"
+        # Pass all arguments except the first one (command name)
+        run_hydra_training "${@:2}"
         ;;
     "hydra-train-local")
         show_local_banner
-        run_hydra_training_local "${2:-config}" "${3:-}" "${4:-false}"
+        # Pass all arguments except the first one (command name)
+        run_hydra_training_local "${@:2}"
         ;;
     "help"|*)
         echo -e "${BLUE}Usage: $0 [COMMAND] [OPTIONS]${NC}"
@@ -1110,7 +1092,7 @@ case "${1:-help}" in
         echo "Commands:"
         echo "  setup                                     - Set up local development environment with uv (no Docker)"
         echo "  train [model] [epochs] [batch_size] [--profile] [job_id] [workers] - Train autoencoder (default: NVTXVanillaAutoencoder, 10 epochs, 64 batch)"
-        echo "  train-local [model] [epochs] [batch_size] [--profile] [job_id] [workers] - Train autoencoder locally with uv (no Docker)"
+        echo "  train-local [args...]                     - Run Hydra-based training locally with uv (no Docker)"
         echo "  train-nvtx [epochs] [batch_size] [job_id] [workers] [model] - Legacy NVTX profiling (default: 5 epochs, 256 batch, 2 workers)"
         echo "  profile [model] [epochs] [batch_size] [job_id] [workers] - Legacy model profiling (default: NVTXVanillaAutoencoder, 5 epochs, 256 batch, 2 workers)"
         echo "  list-models                               - List all available autoencoder models"
@@ -1124,8 +1106,8 @@ case "${1:-help}" in
         echo "  shell                                     - Start interactive bash shell"
         echo "  cleanup                                   - Clean up Docker resources"
         echo "  install-compose                           - Manually install Docker Compose"
-        echo "  hydra-train                               - Run Hydra-based training (next-generation config management)"
-        echo "  hydra-train-local                         - Run Hydra-based training locally"
+        echo "  hydra-train [args...]                     - Run Hydra-based training (next-generation config management)"
+        echo ""
         echo "  help                                      - Show this help message"
         echo ""
         echo "Examples:"
@@ -1134,9 +1116,9 @@ case "${1:-help}" in
         echo "  $0 setup                                 - Set up local dev environment with uv (recommended first step)"
         echo ""
         echo "  🏠 Local Training (No Docker):"
-        echo "  $0 train-local                           - Train default model locally (NVTXVanillaAutoencoder, 10 epochs, 64 batch)"
-        echo "  $0 train-local CNNAutoencoder 20 128     - Train CNN model locally for 20 epochs with batch size 128"
-        echo "  $0 train-local VanillaAutoencoder 5 256 --profile local_test 2 - Train with local profiling"
+        echo "  $0 train-local                           - Train with default Hydra config locally"
+        echo "  $0 train-local model=cnn_autoencoder     - Train CNN model locally using Hydra"
+        echo "  $0 train-local training.max_epochs=20    - Train locally with 20 epochs"
         echo "  $0 list-models-local                     - Show all available models (local environment)"
         echo "  $0 tensorboard-uv                        - Start TensorBoard locally on port 6006"
         echo ""
@@ -1149,10 +1131,11 @@ case "${1:-help}" in
         echo ""
         echo "  🔮 Hydra-Powered Training (Next-Generation Config Management):"
         echo "  $0 hydra-train                           - Train with default Hydra config"
-        echo "  $0 hydra-train config 'model=cnn_autoencoder'        - Train CNN model using Hydra"
-        echo "  $0 hydra-train config 'training.max_epochs=20 model.latent_dim=256' - Override parameters"
-        echo "  $0 hydra-train config 'model=nvtx_vanilla_autoencoder,cnn_autoencoder' true - Multi-run experiments"
-        echo "  $0 hydra-train-local experiment/cnn_comparison       - Run specific experiment locally"
+        echo "  $0 hydra-train model=cnn_autoencoder     - Train CNN model using Hydra"
+        echo "  $0 hydra-train training.max_epochs=20 model.latent_dim=256 - Override parameters"
+        echo "  $0 hydra-train model=nvtx_vanilla_autoencoder,cnn_autoencoder --multirun - Multi-run experiments"
+        echo "  $0 hydra-train --config-name=experiment/cnn_comparison - Run specific experiment"
+        echo ""
         echo ""
         echo "  �� Model Discovery:"
         echo "  $0 list-models                           - Show all available models"

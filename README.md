@@ -1,6 +1,6 @@
 # AI Learning
 
-Learnings from implementing deep learning models from scratch.
+Learnings from implementing deep learning models from scratch with professional configuration management and comprehensive logging.
 
 ## 📁 Project Structure
 
@@ -8,31 +8,195 @@ Learnings from implementing deep learning models from scratch.
 ai-learning/
 ├── src/encoding_101/
 │   ├── models/              # Autoencoder implementations
-│   │   ├── base.py         # Base autoencoder class
-│   │   ├── vanilla_autoencoder.py
-│   │   └── nvtx_autoencoder.py  # NVTX-annotated version
+│   │   ├── base.py         # Base autoencoder class with MAR@5 visualization
+│   │   ├── vanilla_autoencoder.py  # Vanilla + NVTX-enabled autoencoders
+│   │   └── cnn_autoencoder.py      # CNN + NVTX-enabled autoencoders
+│   ├── mixins/             # Reusable functionality
+│   │   └── nvtx.py         # NVTX profiling mixin for any model
 │   ├── training/           # Training utilities
-│   ├── data.py              # Data loading and preprocessing
-│   ├── metrics.py         # Evaluation metrics (MAR@5)
-│   └── visualization/     # Plotting and analysis tools
+│   │   └── trainer.py      # Main training orchestration
+│   ├── data.py             # CIFAR-10 data module (Lightning)
+│   ├── metrics.py          # Evaluation metrics (MAR@5)
+│   ├── utils.py            # Visualization utilities
+│   └── visualization/      # Advanced plotting and analysis tools
+├── configs/                # Hydra configuration management
+│   ├── config.yaml         # Main configuration with defaults
+│   ├── model/              # Model configurations
+│   │   ├── nvtx_vanilla_autoencoder.yaml
+│   │   └── cnn_autoencoder.yaml
+│   ├── training/           # Training configurations
+│   │   ├── default.yaml
+│   │   └── profiling.yaml
+│   ├── data/               # Data module configurations
+│   │   └── cifar10.yaml
+│   ├── profiling/          # NVTX profiling settings
+│   │   └── default.yaml
+│   └── experiment/         # Pre-configured experiments
+│       └── cnn_comparison.yaml
+├── scripts/
+│   ├── hydra_training.py   # Hydra-powered training script (pure loguru)
+│   └── test_hydra_config.py # Configuration validation
 ├── bin/
 │   └── run                 # Docker runtime script (uv-powered)
-├── scripts/
-│   └── profile_training.py # NVTX profiling script
-├── learning/              # Learning materials and guides
-├── logs/                  # Training logs and checkpoints
-├── data/                  # All the data stored here
-├── pyproject.toml         # Project dependencies (uv managed)
-└── uv.lock                # Locked dependencies
+├── logs/                   # Comprehensive logging system
+│   ├── hydra_runs/         # Default Hydra runs with full logs
+│   ├── experiments/        # Experiment-specific runs
+│   └── tensorboard_logs/   # TensorBoard visualization data
+├── data/                   # CIFAR-10 dataset storage
+├── pyproject.toml          # Project dependencies (uv managed)
+└── uv.lock                 # Locked dependencies
 ```
 
-## 🐳 Docker Training (uv-Powered)
+## 🎯 Hydra Configuration Management
+
+This project uses [Hydra](https://hydra.cc/) for professional configuration management, enabling:
+- **Hierarchical configurations** with composable components
+- **Experiment tracking** with automatic logging
+- **Parameter sweeps** and multi-run experiments
+- **Reproducible research** with complete configuration capture
+
+### 🚀 Quick Start with Hydra
+
+```bash
+# Local training (no Docker) - recommended for development
+bin/run train-local
+
+# Override specific parameters
+bin/run train-local model=cnn_autoencoder training.max_epochs=20
+
+# Run pre-configured experiments
+bin/run train-local --config-name=experiment/cnn_comparison
+
+# Multi-run parameter sweeps
+bin/run train-local model=nvtx_vanilla_autoencoder,cnn_autoencoder training.max_epochs=5,10,20 --multirun
+
+# Profiling mode
+bin/run train-local training=profiling
+
+# Direct script usage (alternative)
+uv run python scripts/hydra_training.py
+uv run python scripts/hydra_training.py model=cnn_autoencoder training.max_epochs=20
+```
+
+### 📊 Configuration Examples
+
+#### Model Configurations
+```yaml
+# configs/model/cnn_autoencoder.yaml
+model:
+  _target_: src.encoding_101.models.cnn_autoencoder.NVTXCNNAutoencoder
+  latent_dim: 128
+  visualize_mar: true
+  enable_nvtx: true
+```
+
+#### Training Configurations
+```yaml
+# configs/training/default.yaml
+max_epochs: 10
+batch_size: 64
+learning_rate: 1e-4
+trainer:
+  accelerator: auto
+  devices: [0]
+  precision: 16-mixed
+```
+
+#### Experiment Configurations
+```yaml
+# configs/experiment/cnn_comparison.yaml
+defaults:
+  - /model: cnn_autoencoder
+  - /training: default
+
+model:
+  latent_dim: 256  # Larger latent space
+training:
+  max_epochs: 20
+  batch_size: 128
+```
+
+## 📝 Pure Loguru Logging System
+
+The project features a comprehensive logging system using [loguru](https://loguru.readthedocs.io/) for beautiful, structured logs:
+
+### ✨ Logging Features
+- **Beautiful console output** with colors and emojis
+- **Comprehensive file logging** with automatic rotation (50MB files)
+- **Thread-safe logging** with compression and retention (30 days)
+- **Complete experiment tracking** - every run fully logged
+
+### 📁 Log Structure
+```
+logs/
+├── hydra_runs/                    # Default configuration runs
+│   └── [experiment_name]/
+│       ├── .hydra/               # Complete Hydra metadata
+│       │   ├── config.yaml       # Resolved configuration
+│       │   ├── overrides.yaml    # CLI overrides used
+│       │   └── hydra.yaml        # Hydra internal settings
+│       └── [experiment_name].log # Full training logs
+├── experiments/                   # Custom experiment runs
+│   └── [experiment_name]/        # Same structure as above
+└── tensorboard_logs/             # TensorBoard data
+```
+
+### 🎨 Log Output Examples
+```
+📝 Loguru logging configured - logs will be saved to: /path/to/log
+🔮 Hydra Configuration:
+🏗️ Instantiating model...
+✅ Model class loaded: NVTXCNNAutoencoder
+📊 Instantiating data module...
+✅ Data module loaded: CIFAR10DataModule
+🚀 Starting training process...
+✅ Training complete!
+```
+
+## 🚀 Training Options
+
+This project supports both **local training** (recommended for development) and **Docker training** (for full containerization).
+
+### 🏠 Local Training (Recommended)
+- **Faster iteration**: No Docker overhead
+- **Direct access**: Work with your local environment
+- **Easy debugging**: Direct Python debugging
+- **Resource efficient**: Uses your system resources directly
+
+```bash
+# Setup once (installs uv and dependencies)
+bin/run setup
+
+# Train locally with Hydra
+bin/run train-local
+bin/run train-local model=cnn_autoencoder training.max_epochs=20
+```
+
+### 🐳 Docker Training (Full Containerization)
 
 The project uses [uv](https://docs.astral.sh/uv/) for ultra-fast Python package management in Docker, providing 10-100x faster dependency installation compared to pip.
 
+- **Consistent environment**: Same environment everywhere
+- **GPU isolation**: Containerized CUDA drivers
+- **Production-ready**: Matches deployment environment
+- **Full profiling**: Complete NVTX profiling support
+
+```bash
+# Train with Docker
+bin/run hydra-train
+bin/run hydra-train model=cnn_autoencoder training.max_epochs=20
+```
+
 ### Prerequisites
 
-The `bin/run` script will automatically install missing dependencies, but you can also install them manually:
+#### For Local Training (Recommended)
+```bash
+# One-time setup - installs uv and all dependencies
+bin/run setup
+```
+
+#### For Docker Training (Optional)
+The `bin/run` script will automatically install missing Docker dependencies:
 
 1. **Docker & Docker Compose**: [Install Docker](https://docs.docker.com/get-docker/) 
    - *Auto-installed*: `bin/run` detects and installs Docker + Docker Compose automatically
@@ -42,94 +206,81 @@ The `bin/run` script will automatically install missing dependencies, but you ca
    - *Container-only*: All CUDA drivers and GPU libraries are provided by the NVIDIA PyTorch container
    - *Server-safe*: No destructive changes to your host system
 
-> 💡 **Smart Installation**: Just run `bin/run` and it will guide you through any missing dependencies!
+> 💡 **Quick Start**: For most users, just run `bin/run setup` then `bin/run train-local`!
+> 🐳 **Docker Users**: Run any `bin/run hydra-train` command and it will guide you through Docker setup!
 > 🛡️ **Server-Safe**: All GPU drivers stay safely contained within Docker containers!
 
-### 🚀 Quick Start
+### 🚀 Docker Quick Start
 
 ```bash
-# First run - auto-installs Docker and NVIDIA runtime if needed
-bin/run train
+# Local training (recommended for development)
+bin/run train-local
 
-# Train vanilla autoencoder (10 epochs, batch size 64)
-bin/run train
+# Train with Docker (full containerized environment)
+bin/run hydra-train
 
-# Train with NVTX profiling (5 epochs, batch size 64)  
-bin/run train-nvtx
+# Run experiments locally
+bin/run train-local --config-name=experiment/cnn_comparison
 
-# Run full NVTX profiling session
-bin/run profile
+# Run experiments with Docker
+bin/run hydra-train --config-name=experiment/cnn_comparison
 
-# Start TensorBoard
+# Override parameters on the fly (local)
+bin/run train-local model=cnn_autoencoder training.max_epochs=20
+
+# Override parameters on the fly (Docker)
+bin/run hydra-train model=cnn_autoencoder training.max_epochs=20
+
+# Multi-run parameter sweeps (local)
+bin/run train-local model=nvtx_vanilla_autoencoder,cnn_autoencoder --multirun
+
+# Multi-run parameter sweeps (Docker)
+bin/run hydra-train model=nvtx_vanilla_autoencoder,cnn_autoencoder --multirun
+
+# Start TensorBoard (local)
+bin/run tensorboard-uv
+
+# Start TensorBoard (Docker)
 bin/run tensorboard
 
 # Interactive development shell
 bin/run shell
 ```
 
-### 🔧 uv-Powered Features
+### 🔧 Advanced Features
 
 ```bash
-# Sync dependencies (blazing fast!)
-bin/run sync
+# Setup local development environment (required for local training)
+bin/run setup
 
-# Add new dependencies
-bin/run uv add numpy
+# Legacy training commands (still supported for backwards compatibility)
+bin/run train 20 128        # Legacy: 20 epochs, batch size 128 (Docker)
+bin/run train-nvtx 5 32     # Legacy: NVTX training, 5 epochs, batch size 32 (Docker)
 
-# Run any uv command
-bin/run uv --help
-
-# Custom training parameters
-bin/run train 20 128        # 20 epochs, batch size 128
-bin/run train-nvtx 5 32     # NVTX training, 5 epochs, batch size 32
+# Development tools
+bin/run shell               # Interactive development shell (Docker)
+bin/run cleanup             # Clean up Docker resources
+bin/run export-requirements # Export filtered requirements.txt
+bin/run list-models         # List available models (Docker)
+bin/run list-models-local   # List available models (local)
 ```
-
-### 🏗️ Docker Architecture
-
-Our Docker setup uses [official uv images](https://docs.astral.sh/uv/guides/integration/docker/) with several optimizations:
-
-- **Base Image**: `ghcr.io/astral-sh/uv:python3.12-bookworm-slim`
-- **Intermediate Layers**: Dependencies installed separately for optimal caching
-- **Cache Mounts**: Build cache preserved between builds for faster rebuilds
-- **Virtual Environment**: Properly managed with uv sync workflow
-
-### Docker Services
-
-- **`ai-learning`**: Main training container with GPU support
-- **`tensorboard`**: TensorBoard visualization (port 6007)
-- **`profiling`**: Dedicated NVTX profiling container
-
-### Manual Docker Commands
-
-```bash
-# Manual docker compose commands
-docker compose up -d tensorboard              # Start TensorBoard service
-docker compose run --rm ai-learning bash      # Interactive shell
-docker compose down                           # Stop all services
-
-# Build optimizations
-docker compose build --progress=plain         # See build progress
-docker compose build --no-cache               # Force rebuild without cache
-```
-
----
 
 ## 🔍 NVTX Profiling for Performance Optimization
 
 NVTX (NVIDIA Tools Extension) annotations provide semantic information about your training loop, enabling detailed performance analysis and bottleneck identification.
 
-### What NVTX Gives You
+### 🎨 NVTX Integration
 
-Without NVTX annotations, GPU profilers show you raw kernels with no context:
-- `volta_sgemm_128x64_tn`, `cudnn_conv_forward_kernel`
-- Anonymous blocks of computation time
-- No indication of which operation belongs to forward pass, backward pass, or data loading
+All models support NVTX profiling through the `NVTXProfilingMixin`:
 
-With NVTX annotations, you get:
-- **Semantic labels**: "Forward Pass", "Backward Pass", "MAR@5 Computation"
-- **Hierarchical structure**: Nested annotations showing operation relationships
-- **Performance attribution**: Clear identification of time-consuming operations
-- **Color-coded timeline**: Visual distinction between different operation types
+```python
+# Available NVTX-enabled models
+from src.encoding_101.models.vanilla_autoencoder import NVTXVanillaAutoencoder
+from src.encoding_101.models.cnn_autoencoder import NVTXCNNAutoencoder
+
+# NVTX can be enabled/disabled per model
+model = NVTXVanillaAutoencoder(enable_nvtx=True)
+```
 
 ### 🎨 NVTX Color Scheme
 
@@ -147,13 +298,22 @@ With NVTX annotations, you get:
 ### 📊 Using NVTX Profiling
 
 ```bash
-# With Docker (recommended)
+# With Hydra configuration (local)
+bin/run train-local training=profiling
+
+# With Hydra configuration (Docker)
+bin/run hydra-train training=profiling
+
+# Direct script usage (local)
+uv run python scripts/hydra_training.py training=profiling
+
+# Legacy profiling with Docker (still supported)
 bin/run profile
 
 # Manual profiling in container
 docker-compose run --rm profiling \
     nsys profile --trace=nvtx,cuda --output=/app/profiling_output/profile \
-    uv run scripts/profile_training.py profile
+    uv run scripts/hydra_training.py training=profiling
 
 # Analyze results with Nsight Systems
 nsys-ui ./profiling_output/profile.qdrep
@@ -175,99 +335,151 @@ nsys-ui ./profiling_output/profile.qdrep
 
 #### NVTX Annotation Hierarchy
 ```
-Training Step
-├── Data Unpack          [should be fast]
-├── Forward Pass         [main computation]
-│   ├── Encoder Forward  [first half]
-│   └── Decoder Forward  [second half]
-├── Loss Computation     [should be minimal]
-└── Validation (every epoch)
-    ├── MAR@5 Computation [periodic, can be expensive]
-    └── Visualization     [periodic, I/O bound]
+🚀 EPOCH N - TRAINING START
+├── Training Step
+│   ├── Data Unpack          [should be fast]
+│   ├── Forward Pass         [main computation]
+│   │   ├── Encoder Forward  [first half]
+│   │   └── Decoder Forward  [second half]
+│   └── Loss Computation     [should be minimal]
+🔍 EPOCH N - VALIDATION START
+├── Validation Step
+│   ├── Val Forward Pass
+│   ├── MAR@5 Computation    [periodic, can be expensive]
+│   └── Visualization        [periodic, I/O bound]
+✅ EPOCH N - VALIDATION END
 ```
 
-### ⚠️ Common Issues
+## 🧪 Advanced Usage
 
-#### NVTX Not Showing
-- **Problem**: Annotations don't appear in Nsight Systems
-- **Solution**: Ensure you're using `--trace=nvtx` flag and NVTX package is installed
-
-#### Performance Overhead
-- **Problem**: NVTX annotations slow down training
-- **Solution**: Use `enable_nvtx=False` in production or reduce annotation granularity
-
-#### Missing GPU Metrics
-- **Problem**: No GPU utilization/memory data
-- **Solution**: Add `--gpu-metrics-device=0` to nsys command
-
-### 🛠️ Advanced NVTX Configuration
-
-#### Custom NVTX Annotations
-
-```python
-from src.encoding_101.models.nvtx_autoencoder import NVTXProfiler, NVTXColors
-
-profiler = NVTXProfiler(enabled=True)
-
-# Custom operation profiling
-with profiler.annotate("Custom Operation", NVTXColors.METRICS):
-    your_custom_function()
-
-# Memory profiling
-with profiler.profile_memory("Large Allocation"):
-    large_tensor = torch.randn(10000, 10000).cuda()
-```
-
-#### Integration with Existing Models
-
-```python
-import nvtx
-from contextlib import nullcontext
-
-class YourModel(nn.Module):
-    def __init__(self, enable_profiling=False):
-        super().__init__()
-        self.enable_profiling = enable_profiling
-    
-    def nvtx_annotate(self, name, color="white"):
-        if self.enable_profiling:
-            return nvtx.annotate(name, color=color)
-        else:
-            return nullcontext()
-    
-    def forward(self, x):
-        with self.nvtx_annotate("Custom Forward", "yellow"):
-            return self.layers(x)
-```
-
-### 🧪 Advanced Profiling Commands
+### Multi-Run Experiments
 
 ```bash
-# Profile training for 30 seconds only
-nsys profile --duration=30 --trace=nvtx,cuda uv run scripts/profile_training.py profile
+# Compare different models (local - recommended)
+bin/run train-local model=nvtx_vanilla_autoencoder,cnn_autoencoder --multirun
 
-# Profile with CPU context switching (advanced)
-nsys profile --trace=nvtx,cuda,osrt --sample=cpu uv run scripts/profile_training.py profile
+# Compare different models (Docker)
+bin/run hydra-train model=nvtx_vanilla_autoencoder,cnn_autoencoder --multirun
 
-# Export specific metrics
-nsys profile --trace=nvtx,cuda --output=training_profile uv run scripts/profile_training.py profile
+# Parameter sweeps (local - recommended)
+bin/run train-local training.learning_rate=1e-3,1e-4,1e-5 model.latent_dim=64,128,256 --multirun
+
+# Parameter sweeps (Docker)
+bin/run hydra-train training.learning_rate=1e-3,1e-4,1e-5 model.latent_dim=64,128,256 --multirun
+
+# Batch size optimization (local)
+bin/run train-local training.batch_size=32,64,128,256 --multirun
+
+# Batch size optimization (Docker)
+bin/run hydra-train training.batch_size=32,64,128,256 --multirun
+
+# Direct script usage (alternative)
+uv run python scripts/hydra_training.py model=nvtx_vanilla_autoencoder,cnn_autoencoder --multirun
 ```
 
----
+### Custom Experiments
+
+Create your own experiment configurations in `configs/experiment/`:
+
+```yaml
+# configs/experiment/my_experiment.yaml
+# @package _global_
+defaults:
+  - /model: cnn_autoencoder
+  - /training: default
+  - _self_
+
+experiment_name: my_custom_experiment_${now:%Y%m%d_%H%M%S}
+
+model:
+  latent_dim: 512
+  visualize_mar: true
+  mar_viz_epochs: 1
+
+training:
+  max_epochs: 50
+  batch_size: 256
+  learning_rate: 5e-4
+
+hydra:
+  run:
+    dir: logs/experiments/${experiment_name}
+```
+
+### Configuration Validation
+
+```bash
+# Test configuration without training (local)
+bin/run train-local --cfg job
+
+# Test configuration without training (Docker)
+bin/run hydra-train --cfg job
+
+# Validate specific experiment (local)
+bin/run train-local --config-name=experiment/my_experiment --cfg job
+
+# Validate specific experiment (Docker)
+bin/run hydra-train --config-name=experiment/my_experiment --cfg job
+
+# Direct script usage (alternative)
+uv run python scripts/test_hydra_config.py
+uv run python scripts/hydra_training.py --config-name=experiment/my_experiment --cfg job
+```
 
 ## 📚 Learning Resources
 
+- **[Hydra Documentation](https://hydra.cc/)** - Configuration management framework
+- **[Loguru Documentation](https://loguru.readthedocs.io/)** - Beautiful Python logging
 - **[uv Documentation](https://docs.astral.sh/uv/)** - Ultra-fast Python package manager
 - **[uv Docker Integration](https://docs.astral.sh/uv/guides/integration/docker/)** - Best practices for uv in Docker
-- **`scripts/profile_training.py`** - Ready-to-use profiling scripts
 - **[NVIDIA Nsight Systems](https://developer.nvidia.com/nsight-systems)** - Visual profiler for analyzing results
-- **[PyTorch Profiler Guide](https://pytorch.org/tutorials/recipes/recipes/profiler_recipe.html)** - PyTorch profiling integration
+- **[PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/)** - Training framework used
+
+## 🎯 Key Features
+
+### ✅ Configuration Management
+- **Hierarchical configs** with Hydra
+- **Experiment tracking** with automatic logging
+- **Parameter sweeps** and multi-run support
+- **Complete reproducibility** with config capture
+
+### ✅ Logging & Monitoring
+- **Pure loguru logging** with beautiful output
+- **Comprehensive log capture** (training, metrics, errors)
+- **Automatic log rotation** and compression
+- **TensorBoard integration** for visualization
+
+### ✅ Performance Profiling
+- **NVTX annotations** for semantic profiling
+- **Mixin-based design** for easy integration
+- **Color-coded timeline** analysis
+- **GPU utilization** monitoring
+
+### ✅ Model Architecture
+- **Modular design** with mixins
+- **NVTX-enabled models** for profiling
+- **MAR@5 visualization** for embedding analysis
+- **PyTorch Lightning** integration
 
 ---
 
-**Need Help?** Check the comprehensive learning guide or run:
+**Need Help?** Check the configuration examples or run:
 ```bash
-uv run scripts/profile_training.py --help
-# Or with Docker:
+# Main help and commands
 bin/run help
+
+# Local training help
+bin/run train-local --help
+
+# Docker training help
+bin/run hydra-train --help
+
+# List available models (local)
+bin/run list-models-local
+
+# List available models (Docker)
+bin/run list-models
+
+# Direct script help (alternative)
+uv run python scripts/hydra_training.py --help
 ```
