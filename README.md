@@ -1,6 +1,6 @@
 # AI Learning
 
-Learnings from implementing deep learning models from scratch with professional configuration management and comprehensive logging.
+Learnings from implementing deep learning models from scratch with configuration management (using Hydra) and NVTX profiling.
 
 ## 📁 Project Structure
 
@@ -49,7 +49,7 @@ ai-learning/
 
 ## 🎯 Hydra Configuration Management
 
-This project uses [Hydra](https://hydra.cc/) for professional configuration management, enabling:
+This project uses [Hydra](https://hydra.cc/) for configuration management, enabling:
 - **Hierarchical configurations** with composable components
 - **Experiment tracking** with automatic logging
 - **Parameter sweeps** and multi-run experiments
@@ -117,14 +117,6 @@ training:
 ```
 
 ## 📝 Pure Loguru Logging System
-
-The project features a comprehensive logging system using [loguru](https://loguru.readthedocs.io/) for beautiful, structured logs:
-
-### ✨ Logging Features
-- **Beautiful console output** with colors and emojis
-- **Comprehensive file logging** with automatic rotation (50MB files)
-- **Thread-safe logging** with compression and retention (30 days)
-- **Complete experiment tracking** - every run fully logged
 
 ### 📁 Log Structure
 ```
@@ -210,41 +202,54 @@ The `bin/run` script will automatically install missing Docker dependencies:
 > 🐳 **Docker Users**: Run any `bin/run hydra-train` command and it will guide you through Docker setup!
 > 🛡️ **Server-Safe**: All GPU drivers stay safely contained within Docker containers!
 
-### 🚀 Docker Quick Start
+### 🏠 Local Development Quick Start
 
 ```bash
-# Local training (recommended for development)
+# One-time setup (installs uv and dependencies)
+bin/run setup
+
+# Basic training
 bin/run train-local
 
-# Train with Docker (full containerized environment)
-bin/run hydra-train
-
-# Run experiments locally
+# Run experiments
 bin/run train-local --config-name=experiment/cnn_comparison
+
+# Override parameters
+bin/run train-local model=cnn_autoencoder training.max_epochs=20
+
+# Multi-run parameter sweeps
+bin/run train-local model=nvtx_vanilla_autoencoder,cnn_autoencoder --multirun
+
+# Start TensorBoard
+bin/run tensorboard-uv
+
+# List available models
+bin/run list-models-local
+```
+
+### 🐳 Docker Quick Start
+
+```bash
+# Basic training with Docker
+bin/run hydra-train
 
 # Run experiments with Docker
 bin/run hydra-train --config-name=experiment/cnn_comparison
 
-# Override parameters on the fly (local)
-bin/run train-local model=cnn_autoencoder training.max_epochs=20
-
-# Override parameters on the fly (Docker)
+# Override parameters with Docker
 bin/run hydra-train model=cnn_autoencoder training.max_epochs=20
 
-# Multi-run parameter sweeps (local)
-bin/run train-local model=nvtx_vanilla_autoencoder,cnn_autoencoder --multirun
-
-# Multi-run parameter sweeps (Docker)
+# Multi-run parameter sweeps with Docker
 bin/run hydra-train model=nvtx_vanilla_autoencoder,cnn_autoencoder --multirun
 
-# Start TensorBoard (local)
-bin/run tensorboard-uv
-
-# Start TensorBoard (Docker)
+# Start TensorBoard with Docker
 bin/run tensorboard
 
 # Interactive development shell
 bin/run shell
+
+# List available models
+bin/run list-models
 ```
 
 ### 🔧 Advanced Features
@@ -315,23 +320,8 @@ docker-compose run --rm profiling \
     nsys profile --trace=nvtx,cuda --output=/app/profiling_output/profile \
     uv run scripts/hydra_training.py training=profiling
 
-# Analyze results with Nsight Systems
-nsys-ui ./profiling_output/profile.qdrep
+# Analyze results with local Mac/Windows system. Download the file and load up the *.qdrep file
 ```
-
-### 🔍 What to Look for in Profiling Results
-
-#### Timeline Analysis
-1. **GPU Utilization**: Should be >80% during forward/backward passes
-2. **Data Loading**: Should not block training (overlap with computation)
-3. **Memory Transfers**: Minimize CPU↔GPU transfers
-4. **Synchronization Points**: Identify unnecessary `torch.cuda.synchronize()` calls
-
-#### Performance Bottlenecks
-- **Long data loading times**: Increase `num_workers` or optimize data pipeline
-- **Low GPU utilization**: Check for CPU bottlenecks or small batch sizes
-- **Memory issues**: Look for large allocations or memory fragmentation
-- **Excessive visualization**: MAR@5 computation taking too long
 
 #### NVTX Annotation Hierarchy
 ```
